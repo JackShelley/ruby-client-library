@@ -60,11 +60,23 @@ class ZohoCRMClient
 	end
 
 	## Makes a HTTP::Post request to the URL along with given params, header and raw-content payload
-	def _post(url="", params={}, headers={}, payload="")
-		if !params.empty? then
-			headers[:params] = params
+	def _post(url="", params={}, headers={})#, payload="")
+		print "\n"
+		print "Inside _post ::::: "
+		print url,"\n"
+		print params,"\n"
+		print headers,"\n"
+		#if !params.empty? then
+		#	headers[:params] = params
+		#end
+		begin
+			response = RestClient.post(url, params, headers)
+		rescue Exception => e
+			puts "Exception in _post function :: Printing stack trace ::"
+			puts e.message
+			puts e.backtrace.inspect
+			raise e
 		end
-		response = RestClient.post(url, payload, headers)
 		handle_response(response)
 	end
 
@@ -140,13 +152,14 @@ class ZohoCRMClient
 	def is_accesstoken_valid
 		res = false
 		t = Time.new.to_i
-		if self.token.expiry_time_insec.nil? then
+
+		if @tokens.expiry_time_insec.nil? then
 			revoke_token #TODO: We need to call another api to find out the expiry time ## Validate tokens
 		end
-		if t < self.tokens.expiry_time_insec
+		if t < @tokens.expiry_time_insec
 			res = true
 		elsif self.revoke_token
-			if self.tokens.is_refreshtoken_valid
+			if @tokens.is_refreshtoken_valid
 				res = true
 			else
 				res = false
@@ -162,47 +175,47 @@ class ZohoCRMClient
 			panic "Invalid token ::: Refresh_Token"
 		end
 		headers = {}
-		auth_str = 'Zoho-oauthtoken ' + self.tokens.access_token
+		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token
 		headers[:Authorization] = auth_str 
 		return headers
 	end
 
 	def revoke_token
 		res = false
-		revoketoken_path = "v2/token"
+		revoketoken_path = "oauth/v2/token"
 		url = Constants::DEF_ACCOUNTS_URL + revoketoken_path
 		print "Refreshing token ::: ","\n"
 		print url
 		params = {}
-		params[:client_id] = self.client_app.client_id
-		params[:client_secret] = self.client_app.client_secret
+		params[:client_id] = @client_app.client_id
+		params[:client_secret] = @client_app.client_secret
 		params[:grant_type] = 'refresh_token'
-		params[:refresh_token] = self.tokens.refresh_token
+		params[:refresh_token] = @tokens.refresh_token
 		headers = {}
-		headers[:params] = params
+		#headers[:params] = params
 		cur_t = Time.new.to_i
 		response = _post(url, params, headers)
 		code = response.code
 		if code == 200 then
-			json = reponse.body
+			json = response.body
 			res_hash = JSON.parse(json)
 			access_token = res_hash['access_token']
 			exp_in_sec = res_hash['expires_in_sec']
 			api_domain = res_hash['api_domain'] ##Do We need this? Im not sure, if we need it we can use it later
 			exp_time = cur_t + exp_in_sec
-			self.tokens.expiry_time_insec = exp_time
-			self.tokens.access_token = access_token
-			self.tokens.is_refreshtoken_valid = true
+			@tokens.expiry_time_insec = exp_time
+			@tokens.access_token = access_token
+			@tokens.is_refreshtoken_valid = true
 			res = true
 		else
 			puts "Problem revoking token ::: refresh_token is in valid"
-			self.tokens.is_refreshtoken_valid = false
+			@tokens.is_refreshtoken_valid = false
 			res = false
 		end
 		return res
 	end
 
-	def panic (msg = "Please handle...")
+	def self.panic (msg = "Please handle...")
 		print "Do Not Know how to handle this, hence panicking ::: ", "\n"
 		print "Here is what you are looking for ::: ", msg, "\n"
 		raise msg
