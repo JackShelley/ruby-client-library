@@ -175,7 +175,7 @@ class ZohoCRMClient
 			panic "Invalid token ::: Refresh_Token"
 		end
 		headers = {}
-		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token
+		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token 
 		headers[:Authorization] = auth_str 
 		return headers
 	end
@@ -219,6 +219,13 @@ class ZohoCRMClient
 		print "Do Not Know how to handle this, hence panicking ::: ", "\n"
 		print "Here is what you are looking for ::: ", msg, "\n"
 		raise msg
+	end
+
+	def handle_exception(e, message)
+		print message, "\n"
+		print 'Exception caught here, not gonna throw ::: So printing trace here', '\n'
+		print e.message, '\n'
+		print e.backtrace.inspect, '\n'
 	end
 end
 
