@@ -17,6 +17,7 @@ class ZCRMField
 		@custom_field = custom_field
 		@is_picklist = is_picklist
 		@hash_values = hash_values
+		@is_mandatory = true
 	end
 
 	def field_name
@@ -34,19 +35,14 @@ class ZCRMField
 	def get_datatype
 		return @data_type
 	end
-
-	#I dont want to think about setting now itself
-
-	#For now, crm field is just an abstraction I would like to be present
-
-
-	# Do we need this function below? 
+	
 	def get_formula
 		data_type = get_datatype
 		if data_type != 'formula' then
 			return true, get('formula')
 		else
 			return false, "Something success"
+		end
 	end
 
 end

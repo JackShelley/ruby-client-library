@@ -2,29 +2,11 @@ require "ZohoCRM_Client/version"
 require 'Constants'
 require 'rest-client'
 require 'time'
-
-
-
-=begin
-	Class name: ZohoCRMClient
-	Member attributes: The necessary credentials for authenticating api calls
-		1) Details associated with the client application created by the customer for authentication. 
-		** Client secret
-		** Client id
-		** Redirect URI
-			*** Client App name [These two are not so important. Not incorporated for now, will do if necessary]
-			*** Client Domain
-		2) Token details
-		** Refresh token
-		** Access token
-		** Scope
-
-	Member functions:
-		_get
-		_post
-		_put
-		_delete
-=end
+require 'ZohoAPIMethod'
+require 'ZCRMModule'
+require 'ZCRMField'
+require 'ZCRMRecord'
+require 'ZohoException'
 
 class ZohoCRMClient
 
@@ -57,6 +39,36 @@ class ZohoCRMClient
 		end
 		response = RestClient.get(url, headers)
 		handle_response(response)
+	end
+
+	def _update_put(url="", params={}, headers={}, payload=nil)
+		begin
+		uri = URI(url)
+		http = Net::HTTP.new(uri.host, uri.port)
+		http.use_ssl = true
+	    req = Net::HTTP::Put.new(uri.path, 'Content-Type' => 'application/json')
+	    print "Printing headers ==> ", "\n", headers
+	    headers.each do |key, value|
+	    	req.add_field(key, value)
+	    end
+	    print "Printing pay load here ::: "
+	    print payload
+	    print "\n"
+	    if !payload.nil? then
+	    	req.body = payload
+	    end
+	    res = http.request(req)
+	    puts "response #{res.body}"
+		rescue => e
+			puts "Exception in _post_with_body === > "
+			puts "\n"
+			puts "Printing backtrace ====> " << "\n"
+		    puts "failed #{e}"
+		    puts "\n"
+		    puts e.backtrace
+		    puts "\n"
+		end
+		return res
 	end
 
 	## Makes a HTTP::Post request to the URL along with given params, header and raw-content payload
@@ -110,7 +122,7 @@ class ZohoCRMClient
 		if !params.empty? then
 			headers[:params] = params
 		end
-		response = RestClient.delete(url, payload, headers)
+		response = RestClient.delete(url, headers)
 		handle_response(response)
 	end
 
@@ -139,9 +151,8 @@ class ZohoCRMClient
 			puts "Failure"
 		end
 		## Printing everything for debugging purpose ## Pl remove eventually 
+		print "Printing response code from ::: handle_response function ", "\n"
 		print code, "\n"
-		print response.body, "\n"
-		print response.headers, "\n"
 
 		if !is_success then
 			raise "API response failed with code ::: " + code.to_s + " "
@@ -181,6 +192,7 @@ class ZohoCRMClient
 	end
 
 	def revoke_token
+		#https://accounts.zoho.com/oauth/v2/token
 		res = false
 		revoketoken_path = "oauth/v2/token"
 		url = Constants::DEF_ACCOUNTS_URL + revoketoken_path
@@ -196,13 +208,20 @@ class ZohoCRMClient
 		cur_t = Time.new.to_i
 		response = _post(url, params, headers)
 		code = response.code
-		if code == 200 then
-			json = response.body
-			res_hash = JSON.parse(json)
+		json = response.body
+		print 'response_body ===> ', '\n'
+		print json, '\n'
+		print 'END of response ===> ', '\n'
+
+		res_hash = JSON.parse(json)
+
+		if code == 200 && !res_hash.has_key?('error') then
 			access_token = res_hash['access_token']
 			exp_in_sec = res_hash['expires_in_sec']
 			api_domain = res_hash['api_domain'] ##Do We need this? Im not sure, if we need it we can use it later
-			exp_time = cur_t + exp_in_sec
+			print 'cur_t ===> ', cur_t, '\n'
+			print 'exp_in_sec ===> ', exp_in_sec, '\n'
+			exp_time = cur_t + 3600
 			@tokens.expiry_time_insec = exp_time
 			@tokens.access_token = access_token
 			@tokens.is_refreshtoken_valid = true
@@ -221,7 +240,7 @@ class ZohoCRMClient
 		raise msg
 	end
 
-	def handle_exception(e, message)
+	def self.handle_exception(e, message)
 		print message, "\n"
 		print 'Exception caught here, not gonna throw ::: So printing trace here', '\n'
 		print e.message, '\n'

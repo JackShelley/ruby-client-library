@@ -6,18 +6,6 @@ require 'time'
 
 class ZCRMRecord
 
-	#@module_name
-	#@hash_values
-	#@modified_fields = {}
-	#@added_fields = {}
-	#@unavailable_fields = []
-	#@fields = {}
-	#@fields_sent_lastupdate = []
-	#@error_fields_lastupdate = []
-	#@update_cycle_complete
-	#@is_record_marked_for_deletion = false
-	#@is_deleted = false
-
 
 	def initialize(module_name, hash_values, fields)
 		@module_name = module_name
@@ -32,6 +20,8 @@ class ZCRMRecord
 		@is_record_marked_for_deletion = false
 		if !hash_values.nil? then
 			@record_id = hash_values['id']
+		else
+			@record_id = nil
 		end
 	end
 
@@ -40,7 +30,7 @@ class ZCRMRecord
 	end
 
 	def set(key, value)
-		field = @fields.get(key)
+		field = @fields[key]
 		data_type = ""
 		if field.nil? then
 			length = @unavailable_fields.length
@@ -53,7 +43,7 @@ class ZCRMRecord
 			added_fields[key] = current_value
 			hash_values[key] = value
 			return true
-		elsif
+		else
 			return update(key,value,current_value, data_type)
 		end
 	end
@@ -72,13 +62,13 @@ class ZCRMRecord
 			return false, message
 		elsif current_value.class != value.class then
 			message = "Datatype mismatch, with current_value of the field. Please check the given value." 
-			if !data_type.empty? then
+			if !data_type.empty? 
 				message = message+" Further info: field is of datatype "+data_type
 			end
 			return false, message
 		else
-			modified_fields[key] = current_value
-			hash_values[key] = value
+			@modified_fields[key] = current_value
+			@hash_values[key] = value
 			return true, message
 		end
 	end
@@ -91,10 +81,75 @@ class ZCRMRecord
 		is_record_marked_for_deletion = false
 	end
 
-	#Utility function below
-	def construct_update_hash
+	def construct_upsert_hash
+
+		required_fields = get_required_fields
+
+		required_fields_available = true
+		required_fields.each do |field_name|
+			val = get(field_name)
+			if val.nil? then
+				required_fields_available = false
+			end
+		end
+
+		if !required_fields_available then
+			return false, nil
+		end
+
 		update_hash = {}
 
+		#update_hash['data'] = update_hash
+		if !self.record_id.nil? then
+			update_hash['id'] = self.record_id
+			print "After adding id jsonkey ::: ", "\n"
+		end
+
+		print "Added fields ====> ", "\n"
+		print @added_fields, "\n"
+		print @modified_fields, "\n"
+
+		@added_fields.each do |field_name, current_value| 
+			update_hash[field_name] = get(field_name)
+		end
+		@modified_fields.each do |field_name, current_value|
+			update_hash[field_name] = get(field_name)
+		end
+
+		print "Printing final update hash ====> ", "\n"
+		print true, update_hash
+		print "\n"
+		return true, update_hash
+	end
+
+	#Utility function below
+	def construct_update_hash #Contains a lot of print statements: Please remove when the function is working properly
+		print 'Inside construct_update_hash :::: ', "\n"
+		#Check for id presence when you are writing this function
+		#If there's no id then you just have to no include it in the final update_hash
+		update_hash = {}
+
+		#update_hash['data'] = update_hash
+		if !self.record_id.nil? then
+			update_hash['id'] = self.record_id
+			print "After adding id jsonkey ::: ", "\n"
+		end
+
+		print "Added fields ====> ", "\n"
+		print @added_fields, "\n"
+		print @modified_fields, "\n"
+
+		@added_fields.each do |field_name, current_value| 
+			update_hash[field_name] = get(field_name)
+		end
+		@modified_fields.each do |field_name, current_value|
+			update_hash[field_name] = get(field_name)
+		end
+
+		print "Printing final update hash ====> ", "\n"
+		print update_hash
+		print "\n"
+		return update_hash
 	end
 
 	def record_errors(record_obj)
@@ -109,11 +164,11 @@ class ZCRMRecord
 	end
 	def check_fields
 		res = false
-		if hash_values.empty? then
+		if @hash_values.empty? then
 			return false
 		else
-			fieldlist = self.get_field_list(fields)
-			returned_fieldlist = hash_values.keys
+			fieldlist = self.get_field_list
+			returned_fieldlist = @hash_values.keys
 			l1 = fieldlist.length
 			l2 = returned_fieldlist.length
 			if l2 > l1
@@ -125,9 +180,9 @@ class ZCRMRecord
 		return res
 	end
 
-	def get_field_list(fields)
+	def get_field_list
 		res = []
-		fields.each do |field_id, field_obj|
+		@fields.each do |field_id, field_obj|
 			res[res.length] = field_obj.field_name
 		end
 		return res
@@ -138,4 +193,5 @@ class ZCRMRecord
 	def record_id
 		return @record_id
 	end
+	private :update
 end

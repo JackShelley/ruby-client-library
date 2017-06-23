@@ -5,4 +5,5 @@ module Constants
 	INVALID_URI_EXCEPTION = "The request url is invalid, please check and proceed"
 	EMPTY_HEADER_EXCEPTION = "Headers is empty, Authorization will fail"
 	TOBEGENERATED = :to_be_generated
+	URL_PATH_SEPERATOR = "/"
 end

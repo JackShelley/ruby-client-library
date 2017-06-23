@@ -16,17 +16,17 @@ class Meta_data
 	@@user_metadata_filename = "/user_data"
 	@@org_metadata_filename = "/org_data"
 
-	def self.module_data(zclient, module_name, meta_folder="/Users/kamalkumar/Desktop/")
+	def self.module_data(zclient, module_name, meta_folder)
 		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
 		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules/{module_name}"
 		begin
 			headers = zclient.construct_headers
 			module_url_path = "settings/modules/"
-			module_url = Constants::DEF_CRMAPI_URL + module_url_path + module_url_path
-			print "url ::: ", module_url
+			module_url = Constants::DEF_CRMAPI_URL + module_url_path + module_name
 			response = zclient._get(module_url, {}, headers)
 			body = response.body
+			print body
 			json_list = Api_Methods._get_list(body, "modules")
 			json = json_list[0]
 			path = meta_folder
@@ -42,7 +42,7 @@ class Meta_data
 				json_type = field['json_type']
 				data_type = field['data_type']
 				custom_field = field['custom_field']
-				if data_type == 'picklist' || data_type = 'multiselectpicklist'
+				if data_type == 'picklist' || data_type == 'multiselectpicklist'
 					is_picklist = true
 				else
 					is_picklist = false
@@ -50,23 +50,29 @@ class Meta_data
 				f = ZCRMField.new(api_name, field_label, json_type, data_type, custom_field, is_picklist, field)
 				mod_obj.add_field(f)
 			end
-			Meta_data::dump_yaml(module_obj, path+file_name)
+			Meta_data::dump_yaml(mod_obj, path+file_name)
 			res = true
 		rescue Exception => e
-			handle_exception(e, "Exception occurred while fetching whole module data for "+module_name)
+			#ZohoCRMClient.handle_exception(e, "Exception occurred while fetching whole module data for ======> "+module_name)
+			raise e
 			res = false
 		end
 		return res
 	end
 
 	def self.load_crm_module(module_name, meta_folder)
-		file_name = @module_metadata_filename+module_name
+		file_name = @@module_metadata_filename+'_'+module_name
 		file = meta_folder+file_name
 		result_obj = Meta_data.load_yaml(file)
 		return result_obj
 	end
 
-	def get_module_list(api_supported = true)
+	def self.get_module_names(zclient, api_supported=true)
+		res = Meta_data.get_module_list(zclient, api_supported)
+		return res.keys
+	end
+
+	def self.get_module_list(zclient, api_supported = true)
 		# Actual url: https://www.zohoapis.com/crm/v2/settings/modules
 		# DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		res = {}
@@ -75,7 +81,7 @@ class Meta_data
 		headers = zclient.construct_headers
 		response = zclient._get(url, {}, headers)
 		body = response.body 
-		module_list = Api_Methods._get_list(body)
+		module_list = Api_Methods._get_list(body, 'modules')
 		module_list.each do |obj|
 			module_name = obj['api_name']
 			has_api = obj['api_supported']
@@ -93,10 +99,10 @@ class Meta_data
 	#Returns two objects,
 	# 1) Boolean - denotes if collecting all the data was successful
 	# 2) Array - Modules that failed because of some error
-	def get_allmodule_data(zclient, meta_folder) 
+	def self.get_allmodule_data(zclient, meta_folder) 
 		failed_modules = []
-		module_list = get_module_list
-		module_list.each do |module_name|
+		module_list = get_module_list(zclient)
+		module_list.each do |module_name, module_obj|
 			if !module_data(zclient, module_name, meta_folder) then
 				failed_modules[failed_modules.length] = module_name
 			end
@@ -105,6 +111,7 @@ class Meta_data
 			return true, failed_modules
 		else
 			return false, failed_modules
+		end
 	end
 
 	def self.user_data(zclient, refresh = true, meta_folder="/Users/kamalkumar/Desktop/")
@@ -214,6 +221,7 @@ class Meta_data
 			puts "Fetching data failed for the following modules :: " << "\n"
 			puts failed_modules
 		end
+		refresh = true # TODO: 'refresh' parameter is not needed. Remove when you are sure that it's not needed.
 		user_res = user_data(zclient, refresh, meta_folder)
 		if user_res then
 			puts "pulling module_data was successful ::: " << "\n"
@@ -233,8 +241,6 @@ class Meta_data
 	# | Dumps serializable content into a given file |
 	def self.dump_yaml(obj, file)
 		puts file
-		print "\n"
-		print obj
 	    ser_obj = YAML::dump(obj)
 	    f = File.new(file, 'w')
 	    f.puts ser_obj
@@ -251,7 +257,9 @@ class Meta_data
 		return obj
 	end
 
-	def self.old_module_data(zclient, meta_folder="/Users/kamalkumar/Desktop/")
+	def self.old_module_data(zclient, meta_folder="/Users/kamalkumar/Desktop/") 
+		#This function is not needed: Please remove it when we have completed the project
+
 		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
 		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules"
@@ -290,6 +298,8 @@ class Meta_data
 	end
 
 	def self.old_load_module_data(meta_folder="/Users/kamalkumar/Desktop/")
+		#This function has been rewritten with other functionalities: 
+		#Please remove the function, when the project is complete
 		begin
 			file = meta_folder + @@module_metadata_filename
 			res = Meta_data::load_yaml(file)
@@ -298,7 +308,7 @@ class Meta_data
 		end
 		return res
 	end
-
+	
 end
 
 
@@ -316,7 +326,13 @@ class Api_Methods
 		end
 	end
 	def load_crm_module(module_name)
-		return Meta_data::load_crm_module(module_name)
+		return Meta_data::load_crm_module(module_name, @meta_folder)
+	end
+	def load_user_data
+		return Meta_data::load_user_data(@meta_folder)
+	end
+	def load_org_data
+		return Meta_data::load_org_data(@meta_folder)
 	end
 
 	#Utility_functions
@@ -330,6 +346,4 @@ class Api_Methods
 		end
 		return res
 	end
-
-
 end
