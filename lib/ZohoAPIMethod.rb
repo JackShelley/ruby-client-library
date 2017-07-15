@@ -5,7 +5,6 @@ $default_api_url = 'https://www.zohoapis.com/crm/v2/'
 $def_api_domain = 'zohoapis.com'
 $def_api_path = '/crm/v2/'
 
-
 # Current directory : Dir.pwd
 # Current file : __FILE__
 # Current line no : __LINE__
@@ -20,13 +19,22 @@ class Meta_data
 		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
 		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules/{module_name}"
+		if zclient.nil? then
+			return false
+		end
+		if module_name.nil? || module_name.empty? then
+			return false			
+		end
 		begin
 			headers = zclient.construct_headers
 			module_url_path = "settings/modules/"
 			module_url = Constants::DEF_CRMAPI_URL + module_url_path + module_name
-			response = zclient._get(module_url, {}, headers)
+			response = zclient.safe_get(module_url, {}, headers)
+			if response.nil? then
+				ZohoCRMClient.debug_log("Response is nil for module ===> #{module_name}")
+				return false
+			end
 			body = response.body
-			print body
 			json_list = Api_Methods._get_list(body, "modules")
 			json = json_list[0]
 			path = meta_folder
@@ -34,7 +42,7 @@ class Meta_data
 			api_name = json['api_name']
 			singular_label = json['singular_label']
 			plural_label = json['plural_label']
-			mod_obj = ZCRMModule.new(zclient, api_name, singular_label, plural_label, json, meta_folder)
+			mod_obj = ZCRMModule.new(zclient, json, meta_folder, api_name, singular_label, plural_label)
 			field_list = json['fields']
 			field_list.each do |field|
 				api_name = field['api_name']
@@ -48,12 +56,21 @@ class Meta_data
 					is_picklist = false
 				end
 				f = ZCRMField.new(api_name, field_label, json_type, data_type, custom_field, is_picklist, field)
-				mod_obj.add_field(f)
+				if is_picklist then
+					picklist_values = field['pick_list_values']
+					f.set_picklist_values(picklist_values)
+				end
+				res = mod_obj.add_field(f)
+				if !res then
+					ZohoCRMClient.debug_log("Something wrong is trying to get in fields array " + f)
+				end
 			end
+			req_fields = mod_obj.get_required_fields
 			Meta_data::dump_yaml(mod_obj, path+file_name)
 			res = true
 		rescue Exception => e
 			#ZohoCRMClient.handle_exception(e, "Exception occurred while fetching whole module data for ======> "+module_name)
+			ZohoCRMClient.debug_log("Exception occurred while fetchin whole module data for ====> #{module_name}")
 			raise e
 			res = false
 		end
@@ -61,8 +78,20 @@ class Meta_data
 	end
 
 	def self.load_crm_module(module_name, meta_folder)
-		file_name = @@module_metadata_filename+'_'+module_name
-		file = meta_folder+file_name
+		file_name = @@module_metadata_filename + '_' + module_name
+		if module_name.nil? || meta_folder.nil? then
+			return nil
+		end
+		if module_name.empty? || meta_folder.empty? then
+			return nil
+		end
+=begin
+		if !File.exists?(file_name) then
+			ZohoCRMClient.debug_log("The file did not exist for module ===> #{module_name}, in the folder ===> #{meta_folder}")
+			return nil
+		end
+=end
+		file = meta_folder + file_name
 		result_obj = Meta_data.load_yaml(file)
 		return result_obj
 	end
@@ -122,7 +151,6 @@ class Meta_data
 			headers = zclient.construct_headers
 			path = "users"
 			url = Constants::DEF_CRMAPI_URL + path
-			print "url ::: ", url, "\n"
 			response = zclient._get(url, {}, headers)
 			body = response.body
 			json_list = Api_Methods._get_list(body, "users")
@@ -155,7 +183,12 @@ class Meta_data
 	def self.load_user_data(meta_folder="/Users/kamalkumar/Desktop/")
 		begin
 			file = meta_folder + @@user_metadata_filename
-			res = Meta_data::load_yaml(file)
+			if File.exists?(file) then
+				res = Meta_data::load_yaml(file)
+			else
+				ZohoCRMClient.debug_log("File did not : #{file}")
+				return nil
+			end
 		rescue
 			ZohoCRMClient.panic "Error occurred loading module_data from its meta_data file ::: Please check the files "
 		end
@@ -170,7 +203,6 @@ class Meta_data
 			headers = zclient.construct_headers
 			path = "org"
 			url = Constants::DEF_CRMAPI_URL + path
-			print "url ::: ", url, "\n"
 			response = zclient._get(url, {}, headers)
 			body = response.body
 			json_list = Api_Methods._get_list(body, "org")
@@ -203,7 +235,12 @@ class Meta_data
 	def self.load_org_data(meta_folder="/Users/kamalkumar/Desktop/")
 		begin
 			file = meta_folder + @@org_metadata_filename
-			res = Meta_data::load_yaml(file)
+			if File.exists?(file) then
+				res = Meta_data::load_yaml(file)
+			else
+				ZohoCRMClient.debug_log("File did not exist : #{file}")
+				return nil
+			end
 		rescue Exception => e
 			puts e.message
 			puts e.backtrace.inspect
@@ -240,7 +277,6 @@ class Meta_data
 	# they both Throw File opening related exceptions
 	# | Dumps serializable content into a given file |
 	def self.dump_yaml(obj, file)
-		puts file
 	    ser_obj = YAML::dump(obj)
 	    f = File.new(file, 'w')
 	    f.puts ser_obj
@@ -248,13 +284,18 @@ class Meta_data
 	end
 
 	def self.load_yaml(file) 
-		content = ""
-		f = File.open(file, 'r')
-		while line=f.gets do
-	  		content = content + line
+		begin
+			content = ""
+			f = File.open(file, 'r')
+			while line=f.gets do
+		  		content = content + line
+			end
+			obj = YAML::load(content)
+			return obj
+		rescue
+			ZohoCRMClient.log("Exception raised while loading yaml from file : "+file)
+			return nil
 		end
-		obj = YAML::load(content)
-		return obj
 	end
 
 	def self.old_module_data(zclient, meta_folder="/Users/kamalkumar/Desktop/") 
@@ -268,7 +309,6 @@ class Meta_data
 			headers = zclient.construct_headers
 			module_url_path = "settings/modules"
 			module_url = Constants::DEF_CRMAPI_URL+module_url_path
-			print "url ::: ", module_url, "\n"
 			response = zclient._get(module_url, {}, headers)
 			body = response.body
 			json_list = Api_Methods._get_list(body, "modules")
@@ -308,24 +348,79 @@ class Meta_data
 		end
 		return res
 	end
-	
+
 end
 
 
 class Api_Methods
-	attr_accessor :zclient, :meta_data_folder
+	attr_accessor :zclient, :meta_folder
 	def initialize(zclient, meta_data_folder="/Users/kamalkumar/Desktop/")
+		if zclient.nil? then
+			ZohoCRMClient.log("zclient that you passed is not valid. Hence returning nil")
+			return nil
+		end
+		tokens = zclient.get_tokens
+		if !tokens.is_refreshtoken_valid.nil? && !tokens.is_refreshtoken_valid  then
+			ZohoCRMClient.log("Refresh token is not valid. Hence returning nil.")
+			return nil
+		end
+		if File.exists?(meta_data_folder) then
+			@meta_folder = meta_data_folder
+		else
+			ZohoCRMClient.log("meta_folder passed is not a valid location. Hence returning nil")
+			ZohoCRMClient.debug_log("Given meta_folder #{meta_data_folder}")
+			return nil
+		end
 		@zclient, @meta_folder = zclient, meta_data_folder
+	end
+	def get_zclient
+		return @zclient
+	end
+	def get_meta_folder
+		return @meta_folder
 	end
 	def refresh_metadata
 		Meta_data.collect_metadata(@zclient, @meta_folder)
 	end
 	def refresh_module_data(modules=[])
+		if modules.nil? then
+			return false, []
+		end
+		if modules.empty? then
+			return false, []
+		end
+		res = false
+		s_mods = []
+		f_mods = []
 		modules.each do |module_name|
-			Meta_data::module_data(zclient, module_name, @meta_folder)
+			begin
+				res = Meta_data::module_data(zclient, module_name, @meta_folder)
+			rescue => e
+				if e.class == InvalidTokensError then
+					return false, []
+				end
+			end
+
+			if res then
+				ZohoCRMClient.debug_log("Success module :: #{module_name}")
+				s_mods[s_mods.length] = module_name
+			else
+				ZohoCRMClient.debug_log("Failed_module :: #{module_name}")
+				f_mods[f_mods.length] = module_name
+			end
+		end
+		ZohoCRMClient.debug_log("From ZohoAPIMethod successful modules : #{s_mods}")
+		ZohoCRMClient.debug_log("From ZohoAPIMethod failed modules : #{f_mods}")
+		if f_mods.empty? then
+			return true, []
+		else
+			return false, f_mods
 		end
 	end
 	def load_crm_module(module_name)
+		if module_name.nil? || module_name.empty? then
+			return nil
+		end
 		return Meta_data::load_crm_module(module_name, @meta_folder)
 	end
 	def load_user_data

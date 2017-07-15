@@ -10,7 +10,19 @@ require 'ZohoException'
 
 class ZohoCRMClient
 
-	def initialize(client_id="", client_secret="", refresh_token="", access_token="", redirect_uri)
+	def self.log(msg="")
+		print "Log from caller ::: " + caller[0]
+		print "\n"
+		print msg, "\n"
+	end
+
+	def self.debug_log(msg="")
+		print msg, "\n"
+		print "----------------- Above message is a debug log from caller ::: " + caller[0]
+		print "\n"
+	end
+
+	def initialize(client_id="", client_secret="", refresh_token="", access_token="", redirect_uri="")
 		@client_app = ClientAppDetails.new(client_id, client_secret, redirect_uri)
 		if refresh_token.empty? then
 			refresh_token = Constants::TOBEGENERATED
@@ -21,6 +33,24 @@ class ZohoCRMClient
 		@tokens = Tokens.new(refresh_token, access_token)
 	end
 
+	def set_access_token(access_token, testing = false)
+		if !testing then
+			return
+		else
+			refresh = @tokens.refresh_token
+			access = @tokens.access_token
+			set_tokens(refresh, access_token)
+		end
+	end
+
+	def get_client_app
+		return @client_app
+	end
+
+	def get_tokens
+		return @tokens
+	end
+
 	def set_tokens(refresh_token="", access_token="")
 		if refresh_token.empty? then
 			refresh_token = Constants::TOBEGENERATED
@@ -28,37 +58,115 @@ class ZohoCRMClient
 		elsif access_token.empty? then
 			access_token = Constants::TOBEGENERATED
 		end
-		@tokens.refresh_token = refresh_token
-		@tokens.access_token = access_token
+		@tokens = Tokens.new(refresh_token, access_token)
 	end
+
+	#def _get(url="", params={}, headers={})
+	#def _upsert_post(url="", params={}, headers={}, payload=nil)
+	#def _update_put(url="", headers={}, payload=nil)
+	#def _post(url="", params={}, headers={})#, payload="")
+	#def _post_multipart(url="", headers={}, multipart_file="")
+	#def _put(url="", params={}, headers={}, payload)
+	#def _delete(url="", params={}, headers={})
+
+
+	#safe_get function is not used anywhere, We could use it if situation demands it.
+	def safe_get(url="", params={}, headers={}) 
+		if headers.nil? || headers.empty? then
+			headers = self.construct_headers
+		end
+		r = _get(url, params, headers)
+		if r.nil? then
+			return nil
+		end
+		code = r.code.to_i
+		if code == 401 then
+			headers = self.construct_headers
+			return _get(url, params, headers)
+		end
+		return r
+	end
+
 
 	## Makes a HTTP::Get request to the URL along with given params, headers
 	def _get(url="", params={}, headers={})
-		if !params.empty? then
-			headers[:params] = params
+		if url.empty? then
+			return nil
 		end
-		response = RestClient.get(url, headers)
-		handle_response(response)
+		if headers.empty? then
+			return nil
+		end
+		if !params.empty? then
+			headers["params"] = params
+		end
+		begin
+			response = RestClient.get(url, headers)
+		rescue => e
+		 	return handle_response(e)
+		end
+		return handle_response(response)
 	end
 
-	def _update_put(url="", params={}, headers={}, payload=nil)
+	def _upsert_post(url="", params={}, headers={}, payload=nil)
+		if url.empty? then
+			ZohoCRMClient.log("Function upsert_post called with an empty url ::: ")
+			return nil
+		end
+		if headers.nil? || headers.empty? then
+			return nil
+		end
+		if payload.nil? || payload.empty? then
+			return nil
+		end
+
+		ZohoCRMClient.debug_log("Printing headers ===> #{headers}")
+		
 		begin
-		uri = URI(url)
-		http = Net::HTTP.new(uri.host, uri.port)
-		http.use_ssl = true
-	    req = Net::HTTP::Put.new(uri.path, 'Content-Type' => 'application/json')
-	    print "Printing headers ==> ", "\n", headers
-	    headers.each do |key, value|
-	    	req.add_field(key, value)
-	    end
-	    print "Printing pay load here ::: "
-	    print payload
-	    print "\n"
-	    if !payload.nil? then
-	    	req.body = payload
-	    end
-	    res = http.request(req)
-	    puts "response #{res.body}"
+			uri = URI(url)
+			http = Net::HTTP.new(uri.host, uri.port)
+			http.use_ssl = true
+		    req = Net::HTTP::Post.new(uri.path, 'Content-Type' => 'application/json')
+		    headers.each do |key, value|
+		    	req.add_field(key, value)
+		    end
+		    if !payload.nil? then
+		    	req.body = payload
+		    end
+		    res = http.request(req)
+		rescue => e
+			puts "Exception in _post_with_body === > "
+			puts "\n"
+			puts "Printing backtrace ====> " << "\n"
+		    puts "failed #{e}"
+		    puts "\n"
+		    puts e.backtrace
+		    puts "\n"
+		    return nil
+		end
+		return res
+	end
+
+	def _update_put(url="", headers={}, payload=nil)
+		if url.empty? then
+			ZohoCRMClient.log("_update_put called with empty url. Hence returning nil.")
+			return nil
+		end
+		if headers.empty? || payload.nil? || payload.empty? then
+			ZohoCRMClient.log("_update_put called with empty headers or payload. Hence, returning nil.")
+			return nil
+		end
+		begin
+			uri = URI(url)
+			http = Net::HTTP.new(uri.host, uri.port)
+			http.use_ssl = true
+		    req = Net::HTTP::Put.new(uri.path, 'Content-Type' => 'application/json')
+		    headers.each do |key, value|
+		    	req.add_field(key, value)
+		    end
+		    if !payload.nil? then
+		    	req.body = payload
+		    end
+		    res = http.request(req)
 		rescue => e
 			puts "Exception in _post_with_body === > "
 			puts "\n"
@@ -73,38 +181,45 @@ class ZohoCRMClient
 
 	## Makes a HTTP::Post request to the URL along with given params, header and raw-content payload
 	def _post(url="", params={}, headers={})#, payload="")
-		print "\n"
-		print "Inside _post ::::: "
-		print url,"\n"
-		print params,"\n"
-		print headers,"\n"
-		#if !params.empty? then
-		#	headers[:params] = params
-		#end
+		if url.nil? || url.empty? then
+			return nil
+		end
+		if params.empty? then
+			return nil
+		end
 		begin
 			response = RestClient.post(url, params, headers)
 		rescue Exception => e
-			puts "Exception in _post function :: Printing stack trace ::"
-			puts e.message
-			puts e.backtrace.inspect
-			raise e
+			ZohoCRMClient.debug_log("Exception in _post function :: Printing stack trace ::")
+			ZohoCRMClient.debug_log(e.message)
+			ZohoCRMClient.debug_log(e.backtrace.inspect)
+			return nil
 		end
 		handle_response(response)
 	end
 
 	## Special handling if the API params involve a multipart payload::: For Upload attachment | photo API
-	def _post_multipart(url="", params={}, headers={}, multipart_file="")
+	def _post_multipart(url="", headers={}, multipart_file="")
+		if url.empty? then
+			ZohoCRMClient.log("_post_multipart called with an empty url. Hence, returning nil")
+			return nil
+		end
+		if headers.empty? then
+			ZohoCRMClient.log("_post_multipart called with empty headers. Hence, returning nil")
+			return nil
+		end
 		begin
 			f = File.new(multipart_file, 'rb')
 		rescue Exception => e  ##{TODO: This message will be caught and directed to the user. For now, I am printing it here, since we do not have full structure for the gem}
-			puts "Error Occurred while opening the multipart payload. Please check the file url again. "
-			puts e.message
-			raise e
+			ZohoCRMClient.log("Error Occurred while opening the multipart payload. Please check the file url again. ")
+			ZohoCRMClient.log(e.message)
+			return nil
 		end
-		if !params.empty? then
-			headers[:params] = params
+		begin
+			response = RestClient.post url, {:file => File.new(multipart_file, 'rb'), :multipart=>true}, headers
+		rescue => e
+			return error_response(e)
 		end
-		response = RestClient.post url, {:file => File.new(multipart_file, 'rb'), multipart=>true}, headers
 		handle_response(response)
 	end
 
@@ -119,26 +234,82 @@ class ZohoCRMClient
 
 	## Makes a HTTP::Put request to the URL along with given params, header
 	def _delete(url="", params={}, headers={})
+		if url.empty? then
+			return nil
+		end
+		if headers.empty? then
+			return nil
+		end
 		if !params.empty? then
 			headers[:params] = params
 		end
-		response = RestClient.delete(url, headers)
+		begin
+			response = RestClient.delete(url, headers)
+		rescue => e
+			return error_response(e)
+		end
 		handle_response(response)
 	end
 
-	def response_headers_process(response)
-		headers = response.headers
-		#Sample header as a map
-		#{:server=>"ZGS", :date=>"Fri, 09 Jun 2017 23:49:16 GMT", :content_type=>"application/json;charset=utf-8", :transfer_encoding=>"chunked", :connection=>"keep-alive", :set_cookie=>["6726760df9=9acc8767d4965247a4e734f98ab92de0; Path=/", "crmcsr=460bab42-9eeb-4a13-be4e-91ccf25e1e00; Path=/; Secure"], :x_content_type_options=>"nosniff", :x_xss_protection=>"1", :pragma=>"no-cache", :cache_control=>"no-store, no-cache, must-revalidate, private", :expires=>"Thu, 01 Jan 1970 00:00:00 GMT", :x_frame_options=>"SAMEORIGIN", :clientversion=>"1149948", :content_disposition=>"attachment; filename=response.json", :x_accesstoken_reset=>"2017-06-09T17:48:48-07:00", :x_ratelimit_reset=>"1497052216747", :x_ratelimit_remaining=>"99", :x_ratelimit_day_limit=>"5000", :x_ratelimit_day_remaining=>"4997", :x_ratelimit_limit=>"100", :content_encoding=>"gzip", :vary=>"Accept-Encoding", :strict_transport_security=>"max-age=15768000"}
-
+	def error_response(e)
+		if e.nil? then
+			ZohoCRMClient.debug_log("handle_exception called with nil object. Hence returning nil.")
+			return nil
+		end
+		if e.class == SocketError then
+			ZohoCRMClient.debug_log("Error raised because of an invalid url api call, resulting in a SocketError. Hence returning nil.")
+			return nil
+		end
+		if !e.respond_to?(:http_code, true) then
+			ZohoCRMClient.debug_log("e is not of type RestClient exceptions ")
+			return nil
+		end
+		code = e.http_code
+		r = e.response
+		body = r.body
+		ZohoCRMClient.debug_log("Code ===> #{code}")
+		ZohoCRMClient.debug_log("Body ===> #{body}")
+		if code == 401 
+			ZohoCRMClient.log("Unauthorized request : resulting in failure")
+			body_json = e.response.body
+			body = JSON.parse(body_json)
+			error_msg = body["code"] #INVALID_TOKEN
+			if error_msg == Constants::INVALID_TOKEN_MSG then
+				temp = revoke_token
+				if temp
+					return e.response
+				elsif !temp
+					return nil
+				end
+			end
+		elsif code == 400
+			ZohoCRMClient.log("Bad Request : resulting in failure")
+			ZohoCRMClient.debug_log("Printing caller stack : \n #{caller.inspect}")
+			return nil
+		end
 	end
 
 	## Checks API response for success, Panics in case of errors
 	def handle_response(response)
+
+		if response.class != RestClient::Response then
+			ZohoCRMClient.debug_log("Response to be handled is an exception")
+			return error_response(response)
+		end
+		if response.nil? then
+			ZohoCRMClient.log("handle_response called with nil. Hence returning nil.")
+			return nil
+		end
 		code = response.code
+		if code.class != Integer then
+			code = code.to_i
+		end
+		#ZohoCRMClient.debug_log("Printing code for debugging purpose ===> #{code}")
+
+
+		#old code
 		is_success = false
 		if code >= 200 && code < 400 then
-			puts "Success\n"
 			is_success = true
 		elsif code == 401 then
 			if revoke_token
@@ -147,26 +318,28 @@ class ZohoCRMClient
 				puts "Failure" << "\n" 
 				panic "Access token refresh failed...\n"
 			end
-		else
+		elsif code == 400 then
+			ZohoCRMClient.log("Bad request: failure")
+		else 
 			puts "Failure"
-		end
-		## Printing everything for debugging purpose ## Pl remove eventually 
-		print "Printing response code from ::: handle_response function ", "\n"
-		print code, "\n"
-
-		if !is_success then
-			raise "API response failed with code ::: " + code.to_s + " "
 		end
 		return response
 	end
 
 	def is_accesstoken_valid
+		if !@tokens.is_refreshtoken_valid.nil? && @tokens.is_refreshtoken_valid == false then
+			return false
+		end
+
+		if @tokens.expiry_time_insec == 0 then
+			res = self.revoke_token #TODO: We need to call another api to find out the expiry time ## Validate tokens
+			return res
+		end
+
 		res = false
 		t = Time.new.to_i
 
-		if @tokens.expiry_time_insec.nil? then
-			revoke_token #TODO: We need to call another api to find out the expiry time ## Validate tokens
-		end
+		#ZohoCRMClient.debug_log("Printing (current time in sec), (expiry_time_insec) ===> (#{t}) , (#{@tokens.expiry_time_insec})")
 		if t < @tokens.expiry_time_insec
 			res = true
 		elsif self.revoke_token
@@ -183,35 +356,37 @@ class ZohoCRMClient
 
 	def construct_headers
 		if !self.is_accesstoken_valid then
-			panic "Invalid token ::: Refresh_Token"
+			#ZohoCRMClient.panic "Refresh_token is invalid, please create a new token and zclient to proceed "
+			raise InvalidTokensError
 		end
 		headers = {}
-		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token 
+		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token
+		headers[:Authorization] = auth_str 
+		return headers
+	end
+
+	def construct_header_for(access_token)
+		headers = {}
+		auth_str = 'Zoho-oauthtoken ' + access_token
 		headers[:Authorization] = auth_str 
 		return headers
 	end
 
 	def revoke_token
-		#https://accounts.zoho.com/oauth/v2/token
+		#ZohoCRMClient.debug_log("Revoke_called :: from :: #{[caller[0],caller[1]]}")
 		res = false
 		revoketoken_path = "oauth/v2/token"
 		url = Constants::DEF_ACCOUNTS_URL + revoketoken_path
-		print "Refreshing token ::: ","\n"
-		print url
 		params = {}
 		params[:client_id] = @client_app.client_id
 		params[:client_secret] = @client_app.client_secret
 		params[:grant_type] = 'refresh_token'
 		params[:refresh_token] = @tokens.refresh_token
 		headers = {}
-		#headers[:params] = params
 		cur_t = Time.new.to_i
 		response = _post(url, params, headers)
 		code = response.code
 		json = response.body
-		print 'response_body ===> ', '\n'
-		print json, '\n'
-		print 'END of response ===> ', '\n'
 
 		res_hash = JSON.parse(json)
 
@@ -219,15 +394,13 @@ class ZohoCRMClient
 			access_token = res_hash['access_token']
 			exp_in_sec = res_hash['expires_in_sec']
 			api_domain = res_hash['api_domain'] ##Do We need this? Im not sure, if we need it we can use it later
-			print 'cur_t ===> ', cur_t, '\n'
-			print 'exp_in_sec ===> ', exp_in_sec, '\n'
 			exp_time = cur_t + 3600
 			@tokens.expiry_time_insec = exp_time
 			@tokens.access_token = access_token
 			@tokens.is_refreshtoken_valid = true
 			res = true
 		else
-			puts "Problem revoking token ::: refresh_token is in valid"
+			ZohoCRMClient.debug_log("Problem revoking token ::: refresh_token isn't valid")
 			@tokens.is_refreshtoken_valid = false
 			res = false
 		end
@@ -271,7 +444,7 @@ class Tokens
 			@is_auth_complete = false
 		end
 		@is_accesstoken_expired = nil
-		@expiry_time_insec = nil
+		@expiry_time_insec = 0
 		@is_refreshtoken_valid = nil
 	end
 end
@@ -280,4 +453,10 @@ end
 ## We will be checking limits before api calls, to avoid unnessary failed calls
 class APILimits
 	attr_accessor :x_daylimit_remaining, :x_daylimit, :x_ratelimit, :x_ratelimit_remaining, :x_ratelimit_reset
+end
+
+class InvalidTokensError < StandardError
+	def initialize(msg="Refresh_token is not valid. Please modify the ZohoCRMClient object or create a new ZohoCRMClient object to accomodate a current and valid refresh_token to proceed further.")
+		super
+	end
 end

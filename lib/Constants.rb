@@ -6,4 +6,14 @@ module Constants
 	EMPTY_HEADER_EXCEPTION = "Headers is empty, Authorization will fail"
 	TOBEGENERATED = :to_be_generated
 	URL_PATH_SEPERATOR = "/"
+	NO_RECORD_TO_UPDATE = "No Record to update"
+	MAND_FIELDS_NOT_SET = "Mandatory fields for some records have not been set. Please check and retry."
+	GENERAL_SUCCESS_MESSAGE = "success"
+	UPSERT_FAIL_MESSAGE = "Some records failed to upsert"
+	EMPTY_RECORDS_MSG = "Records are empty"
+	INVALID_TOKEN_MSG = "INVALID_TOKEN"
+	USE_UPDATE_FUNC = "The module does not support create action but it supports edit. Please use update function instead of upsert."
+	MODULE_DOESNT_SUPPORT_CREATE = "The module does not support create or edit action. Please check and proceed."
+
+	
 end
