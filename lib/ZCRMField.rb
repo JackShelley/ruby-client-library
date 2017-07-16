@@ -33,16 +33,20 @@ class ZCRMField
 		elsif data_type == "picklist"
 			picklist_values = field_obj.get_picklist_values
 			pick_value = picklist_values[0]
+			if pick_value.nil? then
+				ZohoCRMClient.debug_log("Pick value is nil ===> #{field_name}, #{data_type}, #{f_id}")
+			end
 			value = pick_value['actual_value']
 		elsif data_type == "ownerlookup"
+			userObj = apiObj.load_user_data
 			userId = userObj.keys[0]
 			value = userId
 		elsif data_type == "currency"
 			value = 7
 		elsif data_type == "phone"
-			value = "1234567890"
+			value = "10000"
 		elsif data_type == "email"
-			value = randomemail@hotmail.com
+			value = "randomemail@hotmail.com"
 		elsif data_type == "website"
 			value = "google.come"
 		elsif data_type == "boolean"
@@ -79,7 +83,7 @@ class ZCRMField
 		elsif data_type == "double"
 			value = 10.2
 		elsif data_type == "bigint"
-			value = 10000000000
+			value = 10000
 		elsif data_type == "lookup"
 			lookup_json = field_obj.get("lookup")
 			values = field_obj.get_hash_values
@@ -99,6 +103,26 @@ class ZCRMField
 			value = lookup_id
 		end
 		return value
+	end
+
+	def is_creatable
+		temp = @hash_values['view_type']
+		return temp['create']
+	end
+
+	def is_editable
+		temp = @hash_values['view_type']
+		return temp['edit']
+	end
+
+	def is_viewable
+		temp = @hash_values['view_type']
+		return temp['view']
+	end
+
+	def is_qcreatable
+		temp = @hash_values['view_type']
+		return temp['quick_create']
 	end
 
 	def get_hash_values
@@ -139,7 +163,7 @@ class ZCRMField
 	end
 
 	def get_picklist_values
-		return @picklist_values
+		return @hash_values['pick_list_values']
 	end
 
 	def set_picklist_values(values)

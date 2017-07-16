@@ -5,10 +5,6 @@ $default_api_url = 'https://www.zohoapis.com/crm/v2/'
 $def_api_domain = 'zohoapis.com'
 $def_api_path = '/crm/v2/'
 
-# Current directory : Dir.pwd
-# Current file : __FILE__
-# Current line no : __LINE__
-
 class Meta_data
 
 	@@module_metadata_filename = "/module_data"
@@ -251,6 +247,11 @@ class Meta_data
 
 	def self.collect_metadata(zclient, meta_folder="/Users/kamalkumar/Desktop/")
 		mod_res,failed_modules = get_allmodule_data(zclient, meta_folder)
+		refresh = true #TODO: 'refresh' parameter is not needed. Remove when you are sure that it's not needed.
+		user_res = user_data(zclient, refresh, meta_folder)
+		org_res = org_data(zclient, refresh, meta_folder)
+	end
+=begin TODO: Remove comment
 		if mod_res then
 			puts "pulling module_data was successful ::: " << "\n"
 		else
@@ -258,22 +259,21 @@ class Meta_data
 			puts "Fetching data failed for the following modules :: " << "\n"
 			puts failed_modules
 		end
-		refresh = true # TODO: 'refresh' parameter is not needed. Remove when you are sure that it's not needed.
-		user_res = user_data(zclient, refresh, meta_folder)
+
 		if user_res then
 			puts "pulling module_data was successful ::: " << "\n"
 		else
 			puts "Problem while getting module data" << "\n"
 		end
-		org_res = org_data(zclient, refresh, meta_folder)
+
 		if org_res then
 			puts "pulling module_data was successful ::: " << "\n"
 		else
 			puts "Problem while getting module data" << "\n"
 		end
-	end
+=end
 
-	# YAML related functions ::: For Serializing and De-Serializing objects 
+	# YAML functions ::: For Serializing and De-Serializing objects 
 	# they both Throw File opening related exceptions
 	# | Dumps serializable content into a given file |
 	def self.dump_yaml(obj, file)
@@ -297,58 +297,6 @@ class Meta_data
 			return nil
 		end
 	end
-
-	def self.old_module_data(zclient, meta_folder="/Users/kamalkumar/Desktop/") 
-		#This function is not needed: Please remove it when we have completed the project
-
-		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
-		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
-		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules"
-		res = true
-		begin
-			headers = zclient.construct_headers
-			module_url_path = "settings/modules"
-			module_url = Constants::DEF_CRMAPI_URL+module_url_path
-			response = zclient._get(module_url, {}, headers)
-			body = response.body
-			json_list = Api_Methods._get_list(body, "modules")
-			path = meta_folder
-			file_name = @@module_metadata_filename
-			module_obj = {}
-			json_list.each do |obj|
-				key = obj['api_name']
-				module_obj[key] = obj
-			end
-			begin
-				Meta_data::dump_yaml(module_obj, path+file_name)
-				res = true
-			rescue Exception => e
-				res = false
-				puts e.message
-				puts e.backtrace.inspect
-				ZohoCRMClient.panic "Error occurred while dumping module meta_data "+path+file_name
-			end
-		rescue Exception => e
-			res = false
-			puts e.message
-			puts e.backtrace.inspect
-			ZohoCRMClient.panic "Error in collecting module_data method ::: "
-		end
-		return res
-	end
-
-	def self.old_load_module_data(meta_folder="/Users/kamalkumar/Desktop/")
-		#This function has been rewritten with other functionalities: 
-		#Please remove the function, when the project is complete
-		begin
-			file = meta_folder + @@module_metadata_filename
-			res = Meta_data::load_yaml(file)
-		rescue
-			ZohoCRMClient.panic "Error occurred loading module_data from its meta_data file ::: Please check the files "
-		end
-		return res
-	end
-
 end
 
 

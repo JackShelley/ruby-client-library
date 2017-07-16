@@ -74,80 +74,111 @@ layouts - jsonArray [array of layouts]
 	problem while creating purchase orders
 		Do not know what values to send for product_details field
 	Product_details field is available for 
-		Purchase orders, Quotes, 
+			Purchase orders, Quotes, 
 
 =end
 
-	describe "test_code" do
-		context "Testing code by myself" do
-			it "June 13 2017" do
-				ZohoCRMClient.debug_log("Printing default folder ===> #{@default_meta_folder}")
-				ZohoCRMClient.debug_log("Getting meta data for leads alone ====> ")
-				module_name = "Leads"
-				res = Meta_data.module_data(@zclient, module_name, @default_meta_folder)
-				expect(res).to eq true
-			end
-			it "should just pass things I put here" do
-				api_sup_mods = []
-				api_non_sup_mods = []
-				createable_mods = []
-				non_createable_mods = []
-				editable_mods = []
-				non_editable_mods = []
-				viewable_mods = []
-				non_viewable_mods = []
-				deletable_mods = []
-				non_deletable_mods = []
-
-				@modules_map.each do |mod_name, mod_hash|
-					mod_obj = @apiObj.load_crm_module(mod_name)
-					api_supported = mod_hash['api_supported']
-					if api_supported then
-						api_sup_mods[api_sup_mods.length] = mod_name
-					else
-						api_non_sup_mods[api_non_sup_mods.length] = mod_name
-					end
-					if mod_obj.is_creatable then
-						createable_mods[createable_mods.length] = mod_name
-					else
-						non_createable_mods[non_createable_mods.length] = mod_name
-					end
-					if mod_obj.is_viewable then
-						viewable_mods[viewable_mods.length] = mod_name
-					else
-						non_viewable_mods[non_viewable_mods.length] = mod_name
-					end
-					if mod_obj.is_deletable then
-						deletable_mods[deletable_mods.length] = mod_name
-					else
-						non_deletable_mods[non_deletable_mods.length] = mod_name
-					end
-				end
-=begin
-				print "Printing Api non supported modules ====> "
-				ZohoCRMClient.debug_log(api_non_sup_mods)
-				print "Printing Api supported modules ====> "
-				ZohoCRMClient.debug_log(api_sup_mods)
-				print "Printing Non-Creatable modules ====> "
-				ZohoCRMClient.debug_log(non_createable_mods)
-				print "Printing Creatable modules ====> "
-				ZohoCRMClient.debug_log(createable_mods)
-				print "Printing Non-Editable modules ====> "
-				ZohoCRMClient.debug_log(non_editable_mods)
-				print "Printing Editable modules ====> "
-				ZohoCRMClient.debug_log(editable_mods)
-				print "Printing Non-Viewable modules ====> "
-				ZohoCRMClient.debug_log(non_viewable_mods)
-				print "Printing Viewable modules ====> "
-				ZohoCRMClient.debug_log(viewable_mods)
-				print "Printing Non-Deletable modules ====> "
-				ZohoCRMClient.debug_log(non_deletable_mods)
-				print "Printing Deletable modules ====> "
-				ZohoCRMClient.debug_log(deletable_mods)
-=end
+	describe ".update_records" do 
+		#Anamolies
+			# Call Status is a picklist but field metadata does not have picklist_values
+		context "records is empty" do
+			it "returns false and error message" do
+				records = {}
+				r1,r2 = @lObj.update_records(records)
+				expect(r1).to eq(false)
+				expect(r2).to be_instance_of(String)
+				expect(r2).to eq(Constants::NO_RECORD_TO_UPDATE)
 			end
 		end
-	end
+		context "records passed have not been updated", :focus => true do
+			it "returns success_ids and failed_ids, the records passed have not been updated!" do
+				x_mod = ["Activities", "Calls"]
+				records = {}
+				list = @module_list.keys
+				#n_recs = 1 + rand(200)
+				n_recs = 10
+				ZohoCRMClient.debug_log("Number of recs ===> #{n_recs}")
+				list.each do |mod|
+					if x_mod.include? mod then
+						next
+					end
+					ZohoCRMClient.debug_log("trying for module ===> #{mod}")
+					mod_obj = @apiObj.load_crm_module(mod)
+					if !mod_obj.is_editable then
+						next
+					end
+
+					records = mod_obj.get_records(n_recs)
+					record_ids = records.keys
+					size = records.size
+					h_size = size/2
+					temp = h_size.times.map{rand(size)}
+					not_updated_ids = []
+					temp.each do |seq|
+						temp_id = record_ids[seq]
+						not_updated_ids[not_updated_ids.length] = temp_id
+					end
+					to_be_updated_fields = {}
+					all_fields = mod_obj.get_fields
+					all_fields_ids = all_fields.keys
+					number_of_fields_to_update = 1 + rand(all_fields.length)
+					to_update_f_seqs = number_of_fields_to_update.times.map{rand(all_fields.length)}
+					to_update_f_seqs.uniq!
+					to_update_f_seqs.each do |seq|
+						to_be_updated_field_id = all_fields_ids[seq]
+						to_be_updated_field_obj = all_fields[to_be_updated_field_id]
+						to_be_updated_fields[to_be_updated_field_id] = to_be_updated_field_obj
+					end
+					records.each do |id, r|
+						if not_updated_ids.include? id then
+							next
+						end
+						#Update the id
+						to_be_updated_fields.each do |f_id, field_obj|
+							f_name = field_obj.field_name
+							value = ZCRMField.get_test_data(field_obj, @apiObj)
+							bool, message = r.set(field_obj, value)
+							expect(bool).to eq true
+						end
+					end
+					s_ids = record_ids - not_updated_ids
+					f_ids = not_updated_ids
+					ZohoCRMClient.debug_log("s_ids, f_ids ===> #{s_ids}, #{f_ids}")
+					r_s_ids, r_f_ids = mod_obj.update_records(records)
+					ZohoCRMClient.debug_log("r_s_ids, r_f_ids ===> #{r_s_ids}, #{r_f_ids}")
+					#Assertions
+					expect(r_s_ids).not_to be_nil
+					expect(r_f_ids).not_to be_nil
+					r_s_ids =~ s_ids
+					r_f_ids =~ f_ids
+				end
+			end
+		end
+		context "all fields are being updated, for all the modules" do
+			it "should return all the ids in success_ids and none in failure_ids" do
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					rand_per_page = 1 + rand(200)
+					records = mod_obj.get_records(rand_per_page)
+					record_ids = records.keys
+					all_fields = mod_obj.get_fields
+					records.each do |record|
+						all_fields.each do |f_id, f_obj|
+							f_name = f_obj.field_name
+							data_type = f_obj.data_type
+							value = ZCRMField.get_test_data(f_obj, @apiObj)
+							record.set(data_type, value)
+						end
+					end
+					s_ids, f_ids = mod_obj.update_records(records)
+					#Assertions
+					s_ids.should =~ record_ids
+					expect(f_ids).to be_empty
+				end
+			end
+		end
+	end #describe .update_records
 
 	describe ".get_records" do
 		context "Wrong inputs" do
@@ -283,7 +314,7 @@ layouts - jsonArray [array of layouts]
 			# Step 2. Repeat the same thing for a different sort
 			# Step 3. Try setting approved=true 
 			# Step 4. Try setting converted=false
-			context "getting records modifying page numbers", :focus => true do
+			context "getting records modifying page numbers" do
 				it "should return records according to the supplied page numbers" do
 					#Things to expect for
 					# The ids returned in the previous page should not be present in the current page
@@ -291,16 +322,17 @@ layouts - jsonArray [array of layouts]
 						#Then when we get records for desc sort_order we should store them in a diff array [preserving order]
 						#We need to compare the two arrays asc_sort_order_ids and desc_sort_order_ids for equality
 						#We need to see if the ids are desc_record_ids in the exact same order but reversed when compared with the asc_sort_ids
-						list = @module_list.keys
+					list = @module_list.keys
 
 					list.each do |module_name|
+						ZohoCRMClient.debug_log("Checking for module ===> #{module_name}")
 						mod_obj = @apiObj.load_crm_module(module_name)
-						#ASC sort order 										#approved=false #converted=false
+						#ASC sort order
 						page = 1
 						asc_sort_ids = []
 						asc_temp_ids = []
-						#n_recs_per_page = 1 + rand(200) #Generates random number from 0-199.
-						n_recs_per_page = 5
+						n_recs_per_page = 1 + rand(200) #Generates random number from 0-199.
+						#n_recs_per_page = 5
 						ZohoCRMClient.debug_log("ASCENDING order ==> ")
 
 						loop do
@@ -343,12 +375,56 @@ layouts - jsonArray [array of layouts]
 							break if (size<n_recs_per_page || page > 2)
 							page = page+1
 						end
-						asc_sort_ids.should =~ desc_sort_ids
-						temp_desc_ids = desc_sort_ids.reverse
-						asc_sort_ids.should == temp_desc_ids
-
 					end
 
+				end
+			end
+			context "For all modules, passing a list of fields along the params" do
+				#Some tests fail, because some of the given fields are not returned
+				it "should have only the fields passed along the params" do
+					list = @module_list.keys
+					list.each do |module_name|
+						if @x_mod_list.include?(module_name) then
+							next
+						end
+						ZohoCRMClient.debug_log("Trying for module ===> #{module_name}")
+						url = Constants::DEF_CRMAPI_URL + module_name
+						mod_obj = @apiObj.load_crm_module(module_name)
+						fields = mod_obj.get_fields
+						n_avail_fields = fields.length
+						n_fields_to_send = 1 + rand(n_avail_fields)
+						field_seq_arr = n_fields_to_send.times.map{rand(n_avail_fields)}
+						field_seq_arr = field_seq_arr.uniq
+						n_fields_to_send = field_seq_arr.size
+						field_name_arr = []
+						fields.each do |id, field|
+							field_name_arr[field_name_arr.length] = field.field_name
+						end
+						fields_param = []
+						field_seq_arr.each do |seq|
+							fname = field_name_arr[seq]
+							fields_param[fields_param.length] = fname
+						end
+						field_csv = fields_param.join(",")
+						ZohoCRMClient.log("We are making a get_records call, with the following fields ")
+						ZohoCRMClient.log(field_csv)
+						ZohoCRMClient.log("number of fields ===> #{fields_param.length}")
+						n_recs_per_page = 1 + rand(200)
+						records = mod_obj.get_records(n_recs_per_page, fields_param)
+						records.each do |id, record|
+							record_hash = record.get_hash_values
+							fields_returned = record_hash.keys
+							if fields_returned.include? "id" then
+								fields_returned.delete("id")
+							end
+							if fields_returned.include? "$editable" then
+								fields_returned.delete("$editable")
+							end
+							ZohoCRMClient.debug_log("Fields returned ====> #{fields_returned}")
+							expect(fields_returned.size).to eq(fields_param.size)
+							fields_returned.should =~ fields_param
+						end
+					end
 				end
 			end
 		end
@@ -517,6 +593,77 @@ layouts - jsonArray [array of layouts]
 			end
 		end
 	end #describe .get_new_record
+
+	describe "test_code" do
+		context "Testing code by myself" do
+			it "June 13 2017" do
+				ZohoCRMClient.debug_log("Printing default folder ===> #{@default_meta_folder}")
+				ZohoCRMClient.debug_log("Getting meta data for leads alone ====> ")
+				module_name = "Leads"
+				res = Meta_data.module_data(@zclient, module_name, @default_meta_folder)
+				expect(res).to eq true
+			end
+			it "should just pass things I put here" do
+				api_sup_mods = []
+				api_non_sup_mods = []
+				createable_mods = []
+				non_createable_mods = []
+				editable_mods = []
+				non_editable_mods = []
+				viewable_mods = []
+				non_viewable_mods = []
+				deletable_mods = []
+				non_deletable_mods = []
+
+				@modules_map.each do |mod_name, mod_hash|
+					mod_obj = @apiObj.load_crm_module(mod_name)
+					api_supported = mod_hash['api_supported']
+					if api_supported then
+						api_sup_mods[api_sup_mods.length] = mod_name
+					else
+						api_non_sup_mods[api_non_sup_mods.length] = mod_name
+					end
+					if mod_obj.is_creatable then
+						createable_mods[createable_mods.length] = mod_name
+					else
+						non_createable_mods[non_createable_mods.length] = mod_name
+					end
+					if mod_obj.is_viewable then
+						viewable_mods[viewable_mods.length] = mod_name
+					else
+						non_viewable_mods[non_viewable_mods.length] = mod_name
+					end
+					if mod_obj.is_deletable then
+						deletable_mods[deletable_mods.length] = mod_name
+					else
+						non_deletable_mods[non_deletable_mods.length] = mod_name
+					end
+				end
+=begin
+				print "Printing Api non supported modules ====> "
+				ZohoCRMClient.debug_log(api_non_sup_mods)
+				print "Printing Api supported modules ====> "
+				ZohoCRMClient.debug_log(api_sup_mods)
+				print "Printing Non-Creatable modules ====> "
+				ZohoCRMClient.debug_log(non_createable_mods)
+				print "Printing Creatable modules ====> "
+				ZohoCRMClient.debug_log(createable_mods)
+				print "Printing Non-Editable modules ====> "
+				ZohoCRMClient.debug_log(non_editable_mods)
+				print "Printing Editable modules ====> "
+				ZohoCRMClient.debug_log(editable_mods)
+				print "Printing Non-Viewable modules ====> "
+				ZohoCRMClient.debug_log(non_viewable_mods)
+				print "Printing Viewable modules ====> "
+				ZohoCRMClient.debug_log(viewable_mods)
+				print "Printing Non-Deletable modules ====> "
+				ZohoCRMClient.debug_log(non_deletable_mods)
+				print "Printing Deletable modules ====> "
+				ZohoCRMClient.debug_log(deletable_mods)
+=end
+			end
+		end
+	end
 
 =begin
 

@@ -241,7 +241,7 @@ class ZCRMModule
 
 	def get_records(per_page=200, fields=[], page=1, sort_order='', approved=false, converted=false)
 		#In case of invalid fields being present in the fields params passed, 
-			#The invalid names will be 
+		#The invalid names will be 
 		#ZohoCRMClient.debug_log("Inside get_records === > ")
 		per_page_limit = 200 #TODO: need to confirm per_page limit
 
@@ -260,8 +260,6 @@ class ZCRMModule
 		if per_page.class == per_page_def.class then
 			if per_page != 0 || !per_page > per_page_limit then
 				per_page_fv = per_page
-			else
-				per_page_fv = per_page_def
 			end
 		end
 		fields_fv = []
@@ -286,6 +284,8 @@ class ZCRMModule
 			if inv_names.length > 0 then
 				ZohoCRMClient.log("The following invalid fields were present in given fields params. \n They are being returned. \n They are #{inv_names}. ")
 				return inv_names
+			else
+				fields_fv = fields
 			end
 		else
 			ZohoCRMClient.log("Given fields param had invalid values. Hence the fields params is not being populated. \n")
@@ -314,7 +314,6 @@ class ZCRMModule
 			converted_fv = converted
 		end
 
-
 		records = {}
 		url = Constants::DEF_CRMAPI_URL + self.module_name
 		params = construct_GET_params(sort_order_fv, per_page_fv, approved_fv, converted_fv, fields_fv, page_fv)
@@ -335,6 +334,7 @@ class ZCRMModule
 			records[id] = record_obj
 		end
 		#Checking to see if there's a change in the field list
+=begin
 		first_record = records[records.keys[0]]
 		if !@should_refresh_metadata then
 			@should_refresh_metadata = first_record.check_fields
@@ -345,6 +345,7 @@ class ZCRMModule
 				@should_refresh_metadata = false
 			end
 		end
+=end
 		return records
 	end
 
@@ -353,23 +354,26 @@ class ZCRMModule
 			return false, "No Record to update"
 		end
 		url = Constants::DEF_CRMAPI_URL + self.module_name
-		print "Url ===> ", url
 
 		headers = @zclient.construct_headers
 		temp = []
+		failed_ids = []
 		records.each do |id, record|
-			update_hash = record.construct_update_hash
-			temp[temp.length] = update_hash
+			bool,update_hash = record.construct_update_hash
+			if bool then
+				temp[temp.length] = update_hash
+			else
+				ZohoCRMClient.debug_log("Not_updated_id ====> #{id}")
+				failed_ids[failed_ids.length] = id
+			end
 		end
 		final_hash = {}
 		final_hash['data'] = temp
-		print "Final_hash ", "\n"
-		print final_hash, "\n"
 		update_json=JSON.generate(final_hash)
+		ZohoCRMClient.debug_log("Update json ===> #{update_json}")
 		response = @zclient._update_put(url, headers, update_json)
 		body = response.body
-		print "Printing response body ===> ", "\n"
-		print body, "\n"
+		ZohoCRMClient.debug_log("Printing response body ===> #{body}")
 		returned_records = Api_Methods._get_list(body, "data")
 		success_ids = []
 		failed_ids = []
@@ -554,11 +558,10 @@ class ZCRMModule
 		end
 	end
 
-
-
 	def rebuild_moduledata
 		Meta_data.module_data(@zclient, self.module_name, @meta_folder)
 	end
+
 	def populate_metadata_from_local
 		load_crmmodule(module_name, @meta_folder)
 	end

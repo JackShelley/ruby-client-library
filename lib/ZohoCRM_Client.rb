@@ -31,6 +31,21 @@ class ZohoCRMClient
 			access_token = Constants::TOBEGENERATED
 		end
 		@tokens = Tokens.new(refresh_token, access_token)
+		@api_limits = nil
+	end
+
+	def get_api_limits
+		return @api_limits
+	end
+
+	def set_api_limits(limits)
+		if limits.class == APILimits then
+			@api_limits = limits
+		end
+	end
+
+	def self.getcurtimeinmillis
+		return (Time.now.to_f * 1000).to_i
 	end
 
 	def set_access_token(access_token, testing = false)
@@ -71,7 +86,7 @@ class ZohoCRMClient
 
 
 	#safe_get function is not used anywhere, We could use it if situation demands it.
-	def safe_get(url="", params={}, headers={}) 
+	def safe_get(url="", params={}, headers={})
 		if headers.nil? || headers.empty? then
 			headers = self.construct_headers
 		end
@@ -81,6 +96,10 @@ class ZohoCRMClient
 		end
 		code = r.code.to_i
 		if code == 401 then
+			headers = self.construct_headers
+			return _get(url, params, headers)
+		end
+		if code == 429 then
 			headers = self.construct_headers
 			return _get(url, params, headers)
 		end
@@ -99,6 +118,8 @@ class ZohoCRMClient
 		if !params.empty? then
 			headers["params"] = params
 		end
+		ZohoCRMClient.debug_log("Params ===> #{params}")
+		ZohoCRMClient.debug_log("caller ===> #{caller[0]}\n#{caller[1]}\n#{caller[2]}")
 		begin
 			response = RestClient.get(url, headers)
 		rescue => e
@@ -195,7 +216,7 @@ class ZohoCRMClient
 			ZohoCRMClient.debug_log(e.backtrace.inspect)
 			return nil
 		end
-		handle_response(response)
+		#handle_response(response)
 	end
 
 	## Special handling if the API params involve a multipart payload::: For Upload attachment | photo API
@@ -286,6 +307,13 @@ class ZohoCRMClient
 			ZohoCRMClient.log("Bad Request : resulting in failure")
 			ZohoCRMClient.debug_log("Printing caller stack : \n #{caller.inspect}")
 			return nil
+		elsif code == 429
+			if @api_limits.nil? then
+				@api_limits = APILimits.new(response)
+			else
+				@api_limits.update_api_limits(response)
+			end
+			return e.response
 		end
 	end
 
@@ -304,8 +332,8 @@ class ZohoCRMClient
 		if code.class != Integer then
 			code = code.to_i
 		end
-		#ZohoCRMClient.debug_log("Printing code for debugging purpose ===> #{code}")
 
+		#ZohoCRMClient.debug_log("Printing code for debugging purpose ===> #{code}")
 
 		#old code
 		is_success = false
@@ -323,6 +351,13 @@ class ZohoCRMClient
 		else 
 			puts "Failure"
 		end
+
+		if @api_limits.nil? then
+			@api_limits = APILimits.new(response)
+		else
+			@api_limits.update_api_limits(response)
+		end
+
 		return response
 	end
 
@@ -354,10 +389,31 @@ class ZohoCRMClient
 		return res
 	end
 
+	def get_sleep_secs
+		result = 0
+		if @api_limits.nil? then
+			result = 0
+			#if !self.apilimit_update then
+				#raise APILimitsException.new()
+			#end
+		else
+			result = @api_limits.getsleeptime
+		end
+		return result
+	end
+
 	def construct_headers
 		if !self.is_accesstoken_valid then
-			#ZohoCRMClient.panic "Refresh_token is invalid, please create a new token and zclient to proceed "
-			raise InvalidTokensError
+			raise InvalidTokensError.new()
+		end
+
+		if @api_limits.nil? then
+			ssecs = 0
+		else
+			ssecs = @api_limits.getsleeptime
+		end
+		if ssecs > 0 then
+			sleep(ssecs)
 		end
 		headers = {}
 		auth_str = 'Zoho-oauthtoken ' + @tokens.access_token
@@ -419,6 +475,36 @@ class ZohoCRMClient
 		print e.message, '\n'
 		print e.backtrace.inspect, '\n'
 	end
+
+	def apilimit_update
+		#Modules api is common for all account and should not be a problem
+		if !self.is_accesstoken_valid then
+			raise InvalidTokensError.new()
+		end
+		url = Constants::DEF_CRMAPI_URL + "settings/modules"
+		access_token = @tokens.access_token
+		headers = self.construct_header_for(access_token)
+		response = self.safe_get(url, {}, headers)
+		if !response.nil? then
+			code = response.code.to_i
+			if code < 400 then
+				result = true
+			elsif code == 429 then
+				result = true
+			else
+				result = false
+			end
+		end
+		return result
+	end
+
+	def raiseDayLimitTest
+		if @api_limits.nil? then
+			self.apilimit_update
+		end
+		lastupdtime = @api_limits.get_lastupdtime
+		raise DayLimitExceeded.new(lastupdtime)
+	end
 end
 
 
@@ -452,11 +538,71 @@ end
 ## API Limits, (daily and window limits)
 ## We will be checking limits before api calls, to avoid unnessary failed calls
 class APILimits
-	attr_accessor :x_daylimit_remaining, :x_daylimit, :x_ratelimit, :x_ratelimit_remaining, :x_ratelimit_reset
+	attr_accessor :x_daylimit_remaining, :x_daylimit, :x_ratelimit, :x_ratelimit_remaining, :x_ratelimit_reset, :lastupdtime
+	def initialize(response)
+		if response.class != RestClient::Response then
+			return nil
+		end
+		headers = response.headers	
+		@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
+		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
+		@x_ratelimit = headers[:x_ratelimit_limit]#.to_i
+		@x_ratelimit_remaining = headers[:x_ratelimit_remaining]#.to_i
+		@x_ratelimit_reset = headers[:x_ratelimit_reset]#.to_i
+		@lastupdtime = Time.now.to_i
+	end
+
+	def update_api_limits(response)
+		headers = response.headers
+		@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
+		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
+		@x_ratelimit = headers[:x_ratelimit_limit]#.to_i
+		@x_ratelimit_remaining = headers[:x_ratelimit_remaining]#.to_i
+		@x_ratelimit_reset = headers[:x_ratelimit_reset]#.to_i
+		@lastupdtime = Time.now.to_i
+	end
+
+	def get_lastupdtime
+		return @lastupdtime
+	end
+
+	def getsleeptime
+		result = 0
+		time_now = ZohoCRMClient.getcurtimeinmillis
+		if @x_daylimit_remaining.to_i < 1 then
+			ZohoCRMClient.debug_log("Day limit remaining ===> #{@x_daylimit_remaining}")
+			raise DayLimitExceeded.new(@lastupdtime)
+		end
+		if @x_ratelimit_reset.to_i > time_now then
+			if @x_ratelimit_remaining.to_i > 0 then
+				result = 0
+			else
+				result = @x_ratelimit_reset.to_i - time_now
+				result = (result/1000).to_i + 1
+			end
+		end
+		return result
+	end
 end
 
 class InvalidTokensError < StandardError
-	def initialize(msg="Refresh_token is not valid. Please modify the ZohoCRMClient object or create a new ZohoCRMClient object to accomodate a current and valid refresh_token to proceed further.")
+	def initialize(msg = "Refresh_token is not valid. Please modify the ZohoCRMClient object or create a new ZohoCRMClient object to accomodate a current and valid refresh_token to proceed further.")
+		super
+	end
+end
+class DayLimitExceeded < StandardError
+	def initialize(lastupdtime, msg = "Api limit remaining for today is zero. Please restart when api limit is refreshed.")
+		@message = msg
+		@lastupdtime = lastupdtime
+	end
+end
+class APILimitsError < StandardError
+	def initialze(msg = "Problem Occurred while fetching api limits")
+		super
+	end
+end
+class TestDataException < StandardError
+	def initialize(msg = "Problem occurred while getting testing data ")
 		super
 	end
 end

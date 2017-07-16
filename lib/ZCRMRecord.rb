@@ -357,6 +357,60 @@ class ZCRMRecord
 		return @hash_values[key]
 	end
 
+	def set(field, value)
+		valid = true
+		if value.nil? then
+			valid = false
+			return false, "Value passed is nil"
+		end
+		length = field.get('length')
+		if !length.nil? then
+			l = length.to_i
+			v_l = value.to_s.length
+			if v_l > l then
+				valid = false
+				return false, "Length of the value is longer than maximum length"
+			end
+		end
+		datatype = field.get_datatype
+		if datatype == "website" then
+			vs = value.to_s
+			if vs =~ /^(http|https):\/\/|[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(\/.*)?$/ix then
+				valid = true
+			else
+				valid = false
+				return false, "Please provide a valid URL"
+			end
+		end
+		if datatype == "email" then
+			vs = value.to_s
+			if vs =~ /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i then
+				valid = true
+			else
+				valid = false
+				return false, "Please provide a valid email address"
+			end
+		end
+		if valid then
+			f_name = field.field_name
+			current_value = self.get(f_name)
+			if current_value.nil? then
+				if !field.is_creatable then
+					return false, "Field cannot be set while creation"
+				end
+				@added_fields[f_name] = current_value
+				@hash_values[f_name] = value
+			else
+				if !field.is_editable then
+					return false, "Field cannot be edited"
+				end
+				@modified_fields[f_name] = current_value
+				@hash_values[f_name] = value
+			end
+			return true, "SUCCESS"
+		end
+	end
+
 	def set(key, value)
 		field = @fields[key]
 		data_type = ""
@@ -382,7 +436,7 @@ class ZCRMRecord
 		#2) message - Result of the function in words
 		message = "Value updated locally"
 
-		if current_value.empty? then
+		if current_value.nil? then
 			current_value = get(key)
 		end
 		if current_value.nil? then
@@ -451,32 +505,27 @@ class ZCRMRecord
 
 	#Utility function below
 	def construct_update_hash #Contains a lot of print statements: Please remove when the function is working properly
-		print 'Inside construct_update_hash :::: ', "\n"
 		#Check for id presence when you are writing this function
 		#If there's no id then you just have to no include it in the final update_hash
 		update_hash = {}
 
-		#update_hash['data'] = update_hash
 		if !self.record_id.nil? then
 			update_hash['id'] = self.record_id
 			print "After adding id jsonkey ::: ", "\n"
 		end
 
-		print "Added fields ====> ", "\n"
-		print @added_fields, "\n"
-		print @modified_fields, "\n"
-
 		@added_fields.each do |field_name, current_value| 
-			update_hash[field_name] = get(field_name)
+			update_hash[field_name] = self.get(field_name)
 		end
 		@modified_fields.each do |field_name, current_value|
-			update_hash[field_name] = get(field_name)
+			update_hash[field_name] = self.get(field_name)
 		end
 
-		print "Printing final update hash ====> ", "\n"
-		print update_hash
-		print "\n"
-		return update_hash
+		if update_hash.size > 1 then
+			return true, update_hash
+		else
+			return false, {}
+		end
 	end
 
 	def record_errors(record_obj)
