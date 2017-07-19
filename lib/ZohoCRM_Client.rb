@@ -7,6 +7,7 @@ require 'ZCRMModule'
 require 'ZCRMField'
 require 'ZCRMRecord'
 require 'ZohoException'
+require 'ZCRMLayout'
 
 class ZohoCRMClient
 
@@ -118,14 +119,45 @@ class ZohoCRMClient
 		if !params.empty? then
 			headers["params"] = params
 		end
-		ZohoCRMClient.debug_log("Params ===> #{params}")
-		ZohoCRMClient.debug_log("caller ===> #{caller[0]}\n#{caller[1]}\n#{caller[2]}")
+		#ZohoCRMClient.debug_log("Params ===> #{params}")
+		#ZohoCRMClient.debug_log("caller ===> #{caller[0]}\n#{caller[1]}\n#{caller[2]}")
 		begin
 			response = RestClient.get(url, headers)
 		rescue => e
+			ZohoCRMClient.debug_log("Exception class, self ===> #{e.class}, #{e}")
 		 	return handle_response(e)
 		end
 		return handle_response(response)
+	end
+
+	def safe_upsert_post(url="", params={}, headers={}, payload=nil)
+	#todo:commentout: we have handled these cases inside function ZCRMModule.upsert
+		res = _upsert_post(url, params, headers, payload)
+		ZohoCRMClient.debug_log("Response after first call ==> #{res}")
+		code = res.code.to_i
+		if code == 401 then
+			ZohoCRMClient.debug_log("Inside 401 code if block ")
+			if self.revoke_token then
+				ZohoCRMClient.debug_log("Token successfully revoked ===> ")
+				ZohoCRMClient.debug_log("Now we are going for another call ==> ")
+				headers = self.construct_headers
+				response = _upsert_post(url, params, headers, payload)
+				ZohoCRMClient.debug_log("The returned response is ===> #{response}")
+				return response
+			else
+				raise InvalidTokensError.new()
+			end
+		elsif code == 400 then
+			raise BadRequestException.new()
+		elsif code == 429 then
+			ZohoCRMClient.debug_log("Code 429 while carrying out upsert_post : Hence we are going to update apilimits")
+			ZohoCRMClient.debug_log("Printing api_limits object before updating ===> #{@api_limits}")
+			self.update_limits_HTTPRESPONSE(res)
+			ZohoCRMClient.debug_log("Printing api_limits object after updating ===> #{@api_limits}")
+			headers = self.construct_headers
+			return _upsert_post(url, params, headers, payload)
+		end
+		return res
 	end
 
 	def _upsert_post(url="", params={}, headers={}, payload=nil)
@@ -154,6 +186,7 @@ class ZohoCRMClient
 		    	req.body = payload
 		    end
 		    res = http.request(req)
+		    ZohoCRMClient.debug_log("HTTP status code ==> #{res.code}")
 		rescue => e
 			puts "Exception in _post_with_body === > "
 			puts "\n"
@@ -163,6 +196,43 @@ class ZohoCRMClient
 		    puts e.backtrace
 		    puts "\n"
 		    return nil
+		end
+		return res
+	end
+
+	def update_limits_HTTPRESPONSE(res)
+		if @api_limits.nil? then
+			raise StandardError.new("Api Limits is nil while calling update_put : ")
+		else
+			@api_limits.update_apilimits_HTTPRESPONSE(res)
+		end
+	end
+
+	def safe_update_put(url="", headers={}, payload=nil)
+		res = _update_put(url, headers, payload)
+		ZohoCRMClient.debug_log("Response after first call ===> #{res}")
+		code = res.code.to_i
+		if code == 401 then
+			ZohoCRMClient.debug_log("Inside 401 code if block ==> ")
+			if self.revoke_token then
+				ZohoCRMClient.debug_log("Token successfully revoked ===> ")
+				ZohoCRMClient.debug_log("Now we are going for another call ==> ")
+				headers = self.construct_headers
+				response = _update_put(url, headers, payload)
+				ZohoCRMClient.debug_log("The returned response is ====> #{response}")
+				return response
+			else
+				raise InvalidTokensError.new()
+			end
+		elsif code == 400 then
+			raise BadRequestException.new()
+		elsif code == 429 then
+			ZohoCRMClient.debug_log("code 429 while carrying out update_put : Hence we are going to update apilimits ")
+			ZohoCRMClient.debug_log("Printing api_limits object before updating ===> #{@api_limits}")
+			self.update_limits_HTTPRESPONSE(res)
+			ZohoCRMClient.debug_log("Printing api_limits object after updating ===> #{@api_limits}")
+			headers = self.construct_headers
+			return _update_put(url, headers, payload)
 		end
 		return res
 	end
@@ -188,6 +258,9 @@ class ZohoCRMClient
 		    	req.body = payload
 		    end
 		    res = http.request(req)
+		    code = res.code
+		    ZohoCRMClient.debug_log("code ===> #{code}")
+
 		rescue => e
 			puts "Exception in _post_with_body === > "
 			puts "\n"
@@ -413,6 +486,7 @@ class ZohoCRMClient
 			ssecs = @api_limits.getsleeptime
 		end
 		if ssecs > 0 then
+			ZohoCRMClient.log("Thread is put to sleep for #{ssecs} seconds")
 			sleep(ssecs)
 		end
 		headers = {}
@@ -498,12 +572,15 @@ class ZohoCRMClient
 		return result
 	end
 
-	def raiseDayLimitTest
+	def raiseDayLimitTest#todo: comment out
 		if @api_limits.nil? then
 			self.apilimit_update
 		end
 		lastupdtime = @api_limits.get_lastupdtime
 		raise DayLimitExceeded.new(lastupdtime)
+	end
+	def badRequestTest#todo: comment out
+		raise BadRequestException.new()
 	end
 end
 
@@ -562,6 +639,15 @@ class APILimits
 		@lastupdtime = Time.now.to_i
 	end
 
+	def update_apilimits_HTTPRESPONSE(response)
+		@x_daylimit_remaining = response.header("x_ratelimit_day_remaining")
+		@x_daylimit = response.header("x_ratelimit_day_limit")
+		@x_ratelimit = response.header("x_ratelimit_limit")
+		@x_ratelimit_remaining = response.header("x_ratelimit_remaining")
+		@x_ratelimit_reset = response.header("x_ratelimit_reset")
+		@lastupdtime = Time.now.to_i
+	end
+
 	def get_lastupdtime
 		return @lastupdtime
 	end
@@ -603,6 +689,11 @@ class APILimitsError < StandardError
 end
 class TestDataException < StandardError
 	def initialize(msg = "Problem occurred while getting testing data ")
+		super
+	end
+end
+class BadRequestException < StandardError
+	def initialize(msg = "Bad request")
 		super
 	end
 end

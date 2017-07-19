@@ -39,6 +39,14 @@ class Meta_data
 			singular_label = json['singular_label']
 			plural_label = json['plural_label']
 			mod_obj = ZCRMModule.new(zclient, json, meta_folder, api_name, singular_label, plural_label)
+			layouts = json["layouts"]
+			layout_objs = []
+			layouts.each do |layout_hash|
+				layout_obj = ZCRMLayout.new(layout_hash)
+				layout_objs[layout_objs.length] = layout_obj
+			end
+			mod_obj.set_layouts(layout_objs)
+
 			field_list = json['fields']
 			field_list.each do |field|
 				api_name = field['api_name']
@@ -61,7 +69,7 @@ class Meta_data
 					ZohoCRMClient.debug_log("Something wrong is trying to get in fields array " + f)
 				end
 			end
-			req_fields = mod_obj.get_required_fields
+			req_fields = mod_obj.get_required_fields#todo comment out: this line may not be needed
 			Meta_data::dump_yaml(mod_obj, path+file_name)
 			res = true
 		rescue Exception => e

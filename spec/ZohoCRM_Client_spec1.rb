@@ -602,7 +602,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set("Last_name", "Updated_Last_Name")
+				new_record.set_field_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh
@@ -637,7 +637,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set("Last_name", "Updated_Last_Name")
+				new_record.set_field_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh
@@ -712,7 +712,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set("Last_name", "Updated_Last_Name")
+				new_record.set_field_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh

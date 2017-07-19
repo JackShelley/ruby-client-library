@@ -14,6 +14,5 @@ module Constants
 	INVALID_TOKEN_MSG = "INVALID_TOKEN"
 	USE_UPDATE_FUNC = "The module does not support create action but it supports edit. Please use update function instead of upsert."
 	MODULE_DOESNT_SUPPORT_CREATE = "The module does not support create or edit action. Please check and proceed."
-
 	
 end

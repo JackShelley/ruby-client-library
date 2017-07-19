@@ -25,6 +25,19 @@ class ZCRMRecord
 		end
 		@required_fields = []
 		@module_obj = mod_obj
+		if !mod_obj.nil? then
+			@layout = mod_obj.default_layout
+		end
+	end
+
+	def layout_id
+		return @layout.id
+	end
+
+	def set_layout(layout)
+		if layout.class == ZCRMLayout then
+			@layout = layout
+		end
 	end
 
 	def get_hash_values
@@ -341,6 +354,12 @@ class ZCRMRecord
 	end
 
 	def get_required_fields
+		if !@layout.nil? then
+			return @layout.req_field_ids
+		end
+	end
+
+	def get_required_fields1
 		if !@required_fields.empty? then
 			return @required_fields
 		else
@@ -355,6 +374,39 @@ class ZCRMRecord
 
 	def get(key)
 		return @hash_values[key]
+	end
+
+	def set_owner(id, user_data)
+		profiles = @layout.profiles
+		user_obj = user_data[id]
+		confirm = user_obj["confirm"]
+		if !confirm then
+			return false, "User has not confirmed"
+		end
+		status = user_obj["status"]
+		if status != "active" then
+			return false, "User is not active yet"
+		end
+		u_profile_name = user_obj["profile"]["name"]
+		u_profile_id = user_obj["profile"]["id"]
+		valid = false
+		profiles.each do |p_obj|
+			p_id = p_obj["id"]
+			if u_profile_id == p_id then
+				valid = true
+				break
+			end
+		end
+		if !valid then
+			return false, "User's profile does not have permission for this particular record's layout"
+		end
+		@owner_id = id
+		self.set_field_byname("Owner", id)
+		return true, "SUCCESS"
+	end
+	
+	def get_owner
+		return @owner_id
 	end
 
 	def set(field, value)
@@ -393,6 +445,11 @@ class ZCRMRecord
 		end
 		if valid then
 			f_name = field.field_name
+			if f_name == "Layout" then
+				if value != @layout.id then
+					return false, "Invalid layout id value given"
+				end
+			end
 			current_value = self.get(f_name)
 			if current_value.nil? then
 				if !field.is_creatable then
@@ -411,7 +468,7 @@ class ZCRMRecord
 		end
 	end
 
-	def set(key, value)
+	def set_field_byname(key, value)
 		field = @fields[key]
 		data_type = ""
 		if field.nil? then
@@ -469,7 +526,11 @@ class ZCRMRecord
 			return false, nil
 		end
 
-		req_field_ids = @module_obj.get_required_fields
+		if @layout.nil? then
+			@module_obj.default_layout
+		end
+
+		req_field_ids = self.get_required_fields
 		all_fields = @module_obj.get_fields
 		required_fields_available = true
 		err_field_ids = []
@@ -491,7 +552,6 @@ class ZCRMRecord
 		update_hash = {}
 		if !self.record_id.nil? then
 			update_hash['id'] = self.record_id
-			print "After adding id jsonkey ::: ", "\n"
 		end
 
 		@added_fields.each do |field_name, current_value| 
@@ -507,11 +567,19 @@ class ZCRMRecord
 	def construct_update_hash #Contains a lot of print statements: Please remove when the function is working properly
 		#Check for id presence when you are writing this function
 		#If there's no id then you just have to no include it in the final update_hash
+		if @module_obj.nil? then
+			ZohoCRMClient.log("Please set module_obj for the record to continue")
+			return false, nil
+		end
+
+		if @layout.nil? then
+			@layout = @module_obj.default_layout
+		end
+
 		update_hash = {}
 
 		if !self.record_id.nil? then
 			update_hash['id'] = self.record_id
-			print "After adding id jsonkey ::: ", "\n"
 		end
 
 		@added_fields.each do |field_name, current_value| 

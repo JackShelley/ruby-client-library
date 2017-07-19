@@ -14,6 +14,33 @@ RSpec.describe ZCRMModule do
 
 	end
 
+	describe ".update_record" do
+		context "record is nil", :focus => true do
+			it "should return nil" do
+				record = nil
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					record = mod_obj.update_record(id)
+					#Expectations
+					expect(record).to be_nil
+				end
+			end
+		end
+		context "record is not of type ZCRMRecord", :focus => true do
+			it "should return nil" do
+				record = "nil"
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					record = mod_obj.update_record(id)
+					#Expectations
+					expect(record).to be_nil
+				end
+			end
+		end
+	end #describe .update_record
+
 	describe ".get_record" do
 		context "id is nil" do
 			it "should return nil" do

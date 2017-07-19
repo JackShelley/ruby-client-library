@@ -38,18 +38,132 @@ class ZCRMModule
 		@should_refresh_metadata = false
 		@fields = {}
 		@required_fields = [] # Array of field ids
+		@layouts = []
+	end
+
+=begin
+	def get_test_data(field_obj, apiObj)
+		field_name = field_obj.field_name
+		f_id = field_obj.field_id
+		data_type = field_obj.get_datatype
+		created_source = field.created_source
+		value = nil
+		if data_type == "text"
+			value = "Non_empty_text"
+		elsif data_type == "integer"
+			value = 100
+		elsif data_type == "picklist"
+			picklist_values = field_obj.get_picklist_values
+			pick_value = picklist_values[0]
+			if pick_value.nil? then
+				ZohoCRMClient.debug_log("Pick value is nil ===> #{field_name}, #{data_type}, #{f_id}")
+			end
+			value = pick_value['actual_value']
+		elsif data_type == "ownerlookup"
+			userObj = apiObj.load_user_data
+			userId = userObj.keys[0]
+			value = userId
+		elsif data_type == "currency"
+			value = 7
+		elsif data_type == "phone"
+			value = "10000"
+		elsif data_type == "email"
+			value = "randomemail@hotmail.com"
+		elsif data_type == "website"
+			value = "google.come"
+		elsif data_type == "boolean"
+			value = true
+		elsif data_type == "string"
+			value = "Non_empty_string"
+		elsif data_type == "date"
+			#Format for date : (%Y-%m-%d)
+			d = DateTime.now
+			cur_date = d.strftime("%Y-%m-%d")
+			next_month_date = d.next_month.strftime("%Y-%m-%d")
+			value = next_month_date
+		elsif data_type == "multiselectpicklist"
+			res = []
+			picklist_values = field_obj.get_picklist_values
+			pick_value = picklist_values[0]
+			temp = pick_value['actual_value']
+			res[0] = temp
+			pick_value = picklist_values[1]
+			temp = pick_value['actual_value']
+			res[1] = temp
+			value = res
+		elsif data_type == "datetime"
+			#TODO: Find out the format for datetime
+			#Format for datetime : (%Y-%m-%dT%H:%M:%S+05:30)
+			#Sample datetime from get_records api response 2010-05-07T20:10:00+05:30
+
+			d = DateTime.now
+			cur_date = d.strftime("%Y-%m-%dT%H:%M:%S+05:30")
+			next_month_date = d.next_month.strftime("%Y-%m-%dT%H:%M:%S+05:30")
+			value = next_month_date
+		elsif data_type == "textarea"
+			value = "Non_empty_textarea"
+		elsif data_type == "double"
+			value = 10.2
+		elsif data_type == "bigint" && !(field_name == "Layout" && created_source == "default")
+			value = 10000
+		elsif data_type == "lookup"
+			lookup_json = field_obj.get("lookup")
+			values = field_obj.get_hash_values
+
+			temp_json = JSON.generate(values)
+			temp_fp = "/Users/kamalkumar/test/temp_file.json"
+			temp_file = open(temp_fp, 'w')
+			temp_file.write(temp_json)
+
+			module_name = lookup_json['module']
+			if module_name == "se_module" then
+				module_name = "Leads"
+			end
+			obj = apiObj.load_crm_module(module_name)
+			records = obj.get_records(1)
+			lookup_id = records.keys[0]
+			value = lookup_id
+		end
+		return value
+	end
+=end
+
+	def set_layouts(layouts)
+		@layouts = layouts
+	end
+
+	def default_layout
+		#totype
+		result = nil
+		@layouts.each do |layout|
+			if layout.is_default then
+				result = layout
+			end
+		end
+		return result
+	end
+
+	def get_required_fields(layout_id = nil)
+		layout = nil
+		if layout_id.nil? then
+			layout = self.default_layout
+			if layout.nil? then
+				ZohoCRMClient.debug_log("Default layout is nil ==> \n 
+					This happens because the status has other values than 0 and 1")
+			end
+		else
+			@layouts.each do |l|
+				if l.id.to_s == layout_id.to_s then
+					layout = l
+					break
+				end
+			end
+		end
+		ZohoCRMClient.debug_log("Default layout id ===> #{layout.id} ")
+		return layout.req_field_ids
 	end
 
 	def is_creatable
-		# We are writing these three functions.
-		# Once this is written
-		# We should handle upsert for Activities differently
-		# We should check for creatable permission for modules before trying to create a record
-		# What are the modules that have api permission?
-		# What are the modules that have create permission?
-		# What are the modules that do not have create permission?
-		# What are the modules that do not have api permission?
-		# We should try getting all of this from irb
 		return @hash_values['creatable']
 	end
 
@@ -65,6 +179,37 @@ class ZCRMModule
 		return @hash_values['viewable']
 	end
 
+	def get_layout_ids
+		hv = @hash_values
+		if hv.nil? || hv.empty || !hv.has_key?("layouts") then
+			return nil
+		end
+		layout_arr = hv["layouts"]
+		result = []
+		layout_arr.each do |layout_hash|
+			id = layout_hash["id"]
+			layout_arr[layout_arr.length] = id
+		end
+		return result
+	end
+
+	def default_layout_id
+		hv = @hash_values
+		if hv.nil? || hv.empty || !hv.has_key?("layouts") then
+			return nil
+		end
+		layout_arr = hv["layouts"]
+		result = nil
+		layout_arr.each do |layout_hash|
+			status = layout_hash["status"]
+			if status == 0 then
+				id = layout_hash["id"]
+				result = id
+				return result
+			end
+		end
+	end
+
 	def get_field_names_as_array
 		f_names = []
 		@fields.each do |f_id, f|
@@ -72,7 +217,6 @@ class ZCRMModule
 				ZohoCRMClient.debug_log("Here's a problem ====> #{f}, #{f.class}")
 				next
 			end
-			#ZohoCRMClient.debug_log("Printing field_id, field_obj ====> #{f_id} , #{f.class}, #{f}")
 			f_names[f_names.length] = f.field_name
 		end
 		return f_names
@@ -82,10 +226,10 @@ class ZCRMModule
 	def create_test_records(num)
 		i = 0
 		new_records = []
-		req_fields = get_required_fields
-		fields = get_fields
+		req_fields = self.get_required_fields
+		fields = self.get_fields
 		while i < num do
-			new_record = get_new_record
+			new_record = self.get_new_record
 			fields.each do |id, field_obj|
 				if req_fields.include? id || field_obj.is_required then
 					field_name = field_obj.field_name
@@ -107,14 +251,6 @@ class ZCRMModule
 	def load_crm_module(module_name)
 		return Api_Methods.load_crm_module(module_name, meta_folder)
 	end
-
-	#Points required for the function:
-	#Checking activities currently:
-		#For finding out what activity it is: Activity_Type
-		#
-
-	#Call_Duration - i
-	#
 
 	def get_related_list(rel_obj)
 		#https://www.zohoapis.com/crm/v2/Leads/{record_id}/{Related_list_apiname}
@@ -172,7 +308,7 @@ class ZCRMModule
 	end
 
 	def get_new_record
-		r_fields = self.get_required_fields
+		r_fields = self.get_required_fields#todo this line may not be needed, because we dont use populate required field anymore
 		fields = self.get_fields
 		new_record = ZCRMRecord.new(self.module_name, {}, fields, self)
 		return new_record
@@ -186,7 +322,7 @@ class ZCRMModule
 		return @required_fields
 	end
 
-	def get_required_fields
+	def get_required_fields1
 		if @required_fields.empty? then
 			self.populate_required_fields
 			@required_fields.each do |f_id|
@@ -243,6 +379,10 @@ class ZCRMModule
 		#In case of invalid fields being present in the fields params passed, 
 		#The invalid names will be 
 		#ZohoCRMClient.debug_log("Inside get_records === > ")
+		if !self.is_viewable then
+			return {}
+		end
+
 		per_page_limit = 200 #TODO: need to confirm per_page limit
 
 		#Default param values
@@ -329,7 +469,7 @@ class ZCRMModule
 		body = response.body
 		records_json = Api_Methods._get_list(body, "data")
 		records_json.each do |record_hash|
-			record_obj = ZCRMRecord.new(self.module_name, record_hash, @fields)
+			record_obj = ZCRMRecord.new(self.module_name, record_hash, @fields, self)
 			id = record_obj.record_id
 			records[id] = record_obj
 		end
@@ -350,6 +490,9 @@ class ZCRMModule
 	end
 
 	def update_records(records={})
+		if !self.is_editable then
+			return false, "This module cannot be edited"
+		end
 		if records.empty? then
 			return false, "No Record to update"
 		end
@@ -363,7 +506,6 @@ class ZCRMModule
 			if bool then
 				temp[temp.length] = update_hash
 			else
-				ZohoCRMClient.debug_log("Not_updated_id ====> #{id}")
 				failed_ids[failed_ids.length] = id
 			end
 		end
@@ -371,8 +513,13 @@ class ZCRMModule
 		final_hash['data'] = temp
 		update_json=JSON.generate(final_hash)
 		ZohoCRMClient.debug_log("Update json ===> #{update_json}")
-		response = @zclient._update_put(url, headers, update_json)
+		response = @zclient.safe_update_put(url, headers, update_json)
+		if response.nil? then
+			ZohoCRMClient.debug_log
+		end
+		#response = @zclient._update_put(url, headers, update_json)
 		body = response.body
+		ZohoCRMClient.debug_log("In update records ==> ")
 		ZohoCRMClient.debug_log("Printing response body ===> #{body}")
 		returned_records = Api_Methods._get_list(body, "data")
 		success_ids = []
@@ -409,10 +556,12 @@ class ZCRMModule
 			if success then
 				jsons[jsons.length] = update_hash
 			else
+				ZohoCRMClient.debug_log("mandatory not set for record ===> #{record.record_id}")
 				failed_records[failed_records.length] = record
 			end
 		end
 		if failed_records.length > 0 then
+			ZohoCRMClient.debug_log("There are some records that do not have failed records ==> #{failed_records.length}")
 			return false, Constants::MAND_FIELDS_NOT_SET, failed_records
 		else
 			ZohoCRMClient.log("All records have their mandatory fields set. Hence continuing with upsert. ")
@@ -436,6 +585,12 @@ class ZCRMModule
 			end
 			headers = @zclient.construct_headers
 			response = @zclient._upsert_post(url, {}, headers, update_json)
+		elsif code == 400 then
+			raise BadRequestException.new()
+		elsif code == 429 then
+			@zclient.update_limits_HTTPRESPONSE(response)
+			headers = @zclient.construct_headers
+			response = @zclient._upsert_post(url, {}, headers, payload)
 		end
 		code = response.code.to_i
 		if code == 401 then
@@ -465,13 +620,16 @@ class ZCRMModule
 	end
 
 	def delete_records(ids=[])
-		if id.nil? then
+		if ids.nil? then
 			return false,[]
 		end
-		if id.empty? then
+		if ids.empty? then
 			return false, []
 		end
-		#https://www.zohoapis.com/crm/v2/
+		if !self.is_deletable then
+			return false
+		end
+		ZohoCRMClient.debug_log("ids passed are ===> #{ids}")
 		url = Constants::DEF_CRMAPI_URL + self.module_name
 		print "Url ===> ", url, "\n"
 		number_of_ids = ids.length
@@ -480,7 +638,9 @@ class ZCRMModule
 		ids_param = ids.join(',')
 		params = {}
 		params['ids'] = ids_param
+		ZohoCRMClient.debug_log("params ===> #{params}")
 		headers = @zclient.construct_headers
+		ZohoCRMClient.debug_log("headers ==> #{headers}")
 		response = @zclient._delete(url, params, headers)
 		body = response.body
 		print "Printing response body ::: ", "\n"
@@ -512,42 +672,60 @@ class ZCRMModule
 		if id.empty? then
 			return nil
 		end
+		if !self.is_viewable then
+			return nil
+		end
 		#https://www.zohoapis.com/crm/api/v2/{Module}/{Id}
-		url = Constants::DEF_CRMDATA_API_URL + self.module_name + "/" + id
+		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		ZohoCRMClient.debug_log("URL ===> #{url}")
 		headers = @zclient.construct_headers
 		response = @zclient._get(url, {}, headers)
 		code = response.code
 		if code == 204 then
-			ZohoCRM_Client.log("There is no data for id "+id+" for module "+module_name)
+			ZohoCRMClient.log("There is no data for id "+id+" for module "+module_name)
 			return nil
 		end
 		body = response.body
-		list = ApiMethods._get_list(body, "data")
-		record = list[0]
-		result = ZCRMRecord.new(self.module_name, record, @fields)
+		list = Api_Methods._get_list(body, "data")
+		if list.length > 0 then
+			record = list[0]
+			result = ZCRMRecord.new(self.module_name, record, @fields, self)
+		else
+			result = nil
+		end
 		return result
 	end
 
 	def update_record(record)
+		if record.nil? || record.class != ZCRMRecord then
+			return false, nil
+		end
 		update_hash = record.construct_update_hash
 		id = record.record_id
-		url = Constants::DEF_CRMDATA_API_URL + self.module_name + "/" + id
+		if id.nil? then
+			return false, nil
+		end
+		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
 		headers = @zclient.construct_headers
 		response = @zclient._put(url, {}, headers)
 		body = response.body
-		temp = ApiMethods._get_list(body, "data")
+		ZohoCRMClient.debug_log("Update record response ==> #{body}")
+		temp = Api_Methods._get_list(body, "data")
 		returned_record = temp[0]
 		record.record_error_fields(returned_record)
 		return record
 	end
 
 	def delete(record_id)
+		if !self.is_deletable then
+			return false
+		end
 		#https://www.zohoapis.com/crm/v2/{Module}/{EntityID}
 		url = Constants::DEF_CRMAPI_URL + URL_PATH_SEPERATOR + module_name + URL_PATH_SEPERATOR + record_id
 		headers = @zclient.construct_headers
 		response = @zclient._delete(url, {}, headers)
 		body = response.body
-		temp = ApiMethods._get_list(body, "data")
+		temp = Api_Methods._get_list(body, "data")
 		json = temp[0]
 		code = json.code
 		id = json['details'].id
