@@ -3,9 +3,9 @@ require 'json'
 require 'yaml'
 require 'rest-client'
 require 'time'
+require 'net/http/post/multipart'
 
 class ZCRMRecord
-
 
 	def initialize(module_name, hash_values, fields, mod_obj=nil)
 		@module_name = module_name
@@ -36,6 +36,17 @@ class ZCRMRecord
 
 	def layout_id
 		return @layout.id
+	end
+
+	def self.get_file_name(file_path)
+		if file_path.nil? || file_path.empty? then
+			return file_path
+		end
+		if file_path.include? "/" then
+			return file_path
+		end
+		temp_arr = file_path.split("/")
+		return temp_arr[temp_arr.length - 1]
 	end
 
 	def set_layout(layout)
@@ -69,7 +80,7 @@ class ZCRMRecord
 	def get_attachments
 		#Url: https://www.zohoapis.com/crm/v2/{module}/{record_id}/Attachments
 		if @module_obj.nil? then
-			print "Please set module object before proceeding ::" + @module_obj
+			print "Please set module object before proceeding ::: " + @module_obj
 			return false, {}
 		end
 		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
@@ -87,47 +98,196 @@ class ZCRMRecord
 		return result_data
 	end
 
-	def upload_attachment
-		#url: https://www.zohoapis.com/crm/v2/Leads/1000000231009/Attachments
-		if check_module_obj then
-			print "Please set module_obj and proceed ::: "
+	def upload_attachment(file_path, file_type="image/pdf")
+		if @module_obj.nil? then
+			ZohoCRMClient.debug_log("Please set module_obj and proceed ::: ")
+			return false
 		end
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
+
+		url_str = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
 		zclient = @module_obj.get_zclient
 		headers = zclient.headers
 		params = {}
-		response = zclient.put(url, params, headers)
-		body = response.body
-		list = Api_Methods._get_list(body, "data")
-		failed_ids = []
-		success_ids = []
-		list.each do |json|
-			json.each do |json|
-				code = json['code']
-				details = json['details']
-				id = details['id']
-				if code == "SUCCESS" then
-					success_ids[success_ids.length] = id
-				else
-					failed_ids[failed_ids.length] = id
+
+		file = nil
+		file_name = nil
+		begin
+			file = File.open(file_path)
+			temp_arr = file.split("/")
+			file_name = temp_arr[temp_arr.length-1]
+		rescue => e
+			ZohoCRMClient.debug_log("Error while opening file ==> #{file_path}")
+			ZohoCRMClient.debug_log("Printing exception ==> #{e}")
+			return false
+		end
+
+		url = URI.parse(url_str)
+		http = Net::HTTP.new(url.host, url.port)
+		http.use_ssl = (url.scheme == "https")
+		req = Net::HTTP::Post::Multipart.new url.path, "file" => UploadIO.new(file, file_type, file_name)
+		headers.each do |key, value|
+			req.add_field(key, value)
+		end
+		res = http.request(req)
+		code = res.code.to_i
+		body = nil
+		if code == 401 then
+			if zclient.revoke_token then
+				headers = zclient.construct_headers
+				headers.each do |key, value|
+					req.add_field(key, value)
 				end
+				res = http.request(req)
+			else
+				raise InvalidTokensError.new()
 			end
+		elsif code == 400 then
+			raise BadRequestException.new()
 		end
-		if failed_ids.length > 0 then
-			return false, failed_ids
+		code = res.code.to_i
+		if code == 200 then
+			body = res.body
+		elsif code == 401 then
+			raise InvalidTokensError.new()
+		end
+
+		list = Api_Methods._get_list(body, "data")
+		if list.length > 0 then
+			json = list[0]
+			if json.has_key?("code") then
+				code = json["code"]
+				details = json["details"]
+				id = details["id"]
+				if code.downcase == "success" then	
+					return true, id
+				else
+					return false, id
+				end
+			else
+				return false, nil
+			end
 		else
-			return true, failed_ids
+			return false, nil
 		end
 	end
 
-	def download_attachment
-		#todo comment out
+	def download_attachment(attachment_id, file_name="default_file_name")
+		#todo typing here
+		if attachment_id.nil? || attachment_id.to_s.empty? then
+			return false
+		end
+		if @module_obj.nil? then
+			return false
+		end
+		url_str = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
+		Constants::URL_PATH_SEPERATOR + "Attachments" + Constants::URL_PATH_SEPERATOR + attachment_id
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		response = zclient.safe_get(url, {}, headers)
+		if !response.nil? && response.class == RestClient::Response then
+			code = response.code.to_i
+			if code == 200 then
+				body = response.body
+				counter = 1
+				while File.exists?(file_name) do
+					file_name = file_name + "(" + counter + ")"
+					counter = counter + 1
+				end
+				file = File.open(file_name, "w")
+				file.write(body)
+			else
+				return false
+			end
+		else
+			return false
+		end
 	end
 
-	def upload_photo
+	def upload_photo(image_path, type="image/jpeg")
+		
+		url_str = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		url = URI.parse(url_str)
+		begin
+			img_file = File.open(image_path)
+		rescue => e
+			ZohoCRMClient.debug_log("Exception while opening given file ==> #{img_file} ")
+			ZohoCRMClient.debug_log("Priting exception ==> #{e}")
+		end
+		file_name = ZCRMRecord.get_file_name(img_file)
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+
+		http = Net::HTTP.new(url.host, url.port)
+		http.use_ssl = (url.scheme == "https")
+		req = Net::HTTP::Post::Multipart.new url.path, "file" => UploadIO.new(img_file, type, file_name)
+		headers.each do |key, value|
+			req.add_field(key, value)
+		end
+		res = http.request(req)
+		code = res.code.to_i
+		body = nil
+		if code == 401 then
+			if zclient.revoke_token then
+				headers = zclient.construct_headers
+				headers.each do |key, value|
+					req.add_field(key, value)
+				end
+				res = http.request(req)
+			else
+				raise InvalidTokensError.new()
+			end
+		elsif code == 400 then
+			raise BadRequestException.new()
+		end
+		code = res.code.to_i
+		if code == 200 then
+			body = res.body
+		elsif code == 401 then
+			raise InvalidTokensError.new()
+		end
+		body = res.body
+		ZohoCRMClient.debug_log("body content for upload_photo : #{body}")
+		body_hash = JSON.parse(body)
+		if body_hash.has_key?("code") then
+			message = body_hash["code"]
+			if message.downcase == "success" then
+				return true
+			else
+				return false
+			end
+		else
+			return false
+		end
 	end
 
-	def download_photo
+	def download_photo(file_name = "default_image_name")
+		module_name = @module_obj.module_name
+		if module_name != "Leads" && module_name != "Contacts" then
+			ZohoCRMClient.debug_log("Download and upload photo is supported only for Leads and Contact modules")
+			return false
+		end
+		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		response = zclient.safe_get(url, {}, headers)
+		code = response.code.to_i
+		file = nil
+		body = nil
+		if code == 200 then
+			body = response.body
+			counter = 1
+			while File.exists?(file_name) do
+				file_name = file_name + "(" + counter + ")"
+				counter = counter + 1
+			end
+			file = File.open(file_name, "w")
+			file.write(body)
+			file.close
+		else
+			ZohoCRMClient.debug_log("Response status is ==> #{code}")
+			return false
+		end
+
 	end
 
 	def get_notes
@@ -138,7 +298,7 @@ class ZCRMRecord
 		# Url : https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
 		return_hash = {}
 		notes_mod_obj = @module_obj.load_crm_module('Notes')
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + "Notes"
+		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Notes"
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		params = {}

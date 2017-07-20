@@ -8,6 +8,7 @@ require 'ZCRMField'
 require 'ZCRMRecord'
 require 'ZohoException'
 require 'ZCRMLayout'
+require 'net/http/post/multipart'
 
 class ZohoCRMClient
 
@@ -293,8 +294,19 @@ class ZohoCRMClient
 		#handle_response(response)
 	end
 
+	def _post_multipart(url, file_path, headers)
+		url = URI.parse('https://www.zohoapis.com/crm/v2/Accounts/297527000005241003/Attachments')
+		pdf = File.open("/Users/kamalkumar/Downloads/PDFDocument.pdf")
+		http = Net::HTTP.new(url.host, url.port)
+		http.use_ssl = (url.scheme == "https")
+		req = Net::HTTP::Post::Multipart.new url.path, "file" => UploadIO.new(pdf, "image/pdf", "file")
+		req.add_field("Authorization", "Zoho-oauthtoken 1000.c6b1277122be1affd1ccd38cee3bad4d.a533d0595136df653ee4d4e588a19240")
+		res = http.request(req)
+		puts res.body
+	end
+
 	## Special handling if the API params involve a multipart payload::: For Upload attachment | photo API
-	def _post_multipart(url="", headers={}, multipart_file="")
+	def _post_multipart1(url="", headers={}, multipart_file="")
 		if url.empty? then
 			ZohoCRMClient.log("_post_multipart called with an empty url. Hence, returning nil")
 			return nil
