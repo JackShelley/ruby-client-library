@@ -9,7 +9,7 @@ RSpec.describe ZCRMModule do
 		Meta_data::dump_yaml(obj, fp)
 	end
 	before do
-		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.f00340154a3bf245e0dbd817e091f9da.42d1d9d42d1b06b513cb3e6fdc7b5365", "1000.62510eab1a4e0efbaca8fcca3310405e.622a0ee92c95b65cdc216bd3b45e7c06", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@default_meta_folder = "/Users/kamalkumar/spec_meta_folder/"
 		@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
 		@improper_zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.07575fda88b3dbd73ff279a9af75aa06.c2b0c2add3a09be9a6asdvsdebe56ae6bb8", "1000.7461b182dfddc8e94bf1ec3d9d770fdb.73dc7bb4aedsvsdvsd445a089d0a6c196fa7101", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
@@ -80,7 +80,7 @@ layouts - jsonArray [array of layouts]
 =end
 
 	describe ".update_record" do
-		context "record is nil", :focus => true do
+		context "record is nil" do
 			it "should return false, nil" do
 				record = nil
 				list = @module_list.keys
@@ -93,7 +93,7 @@ layouts - jsonArray [array of layouts]
 				end
 			end
 		end
-		context "record is not of type ZCRMRecord", :focus => true do
+		context "record is not of type ZCRMRecord" do
 			it "should return false, nil" do
 				record = "nil"
 				list = @module_list.keys
@@ -106,7 +106,7 @@ layouts - jsonArray [array of layouts]
 				end
 			end
 		end
-		context "Given record is an new empty record", :focus => true do
+		context "Given record is an new empty record" do
 			it "should return false, nil" do
 				list = @module_list.keys
 				list.each do |mod|
@@ -119,9 +119,91 @@ layouts - jsonArray [array of layouts]
 				end
 			end
 		end
-		context "Required fields do not have value set", :focus => true do
+		context "Some required fields do not have value" do 
+		#todo commentout: this case may not happen
 			it "should return false, nil" do
-				
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					record = mod_obj.get_records(1)
+					req_fields = mod_obj.get_required_fields
+					n_req = req_fields.size
+					temp = n_req/2
+					temp_nil_fields = temp.times.map{ rand(n_req) }
+					temp_nil_fields.uniq!
+					nil_field_objs = []
+					all_fields = mod_obj.get_fields
+					temp_nil_fields.each do |seq|
+						temp_id = req_fields[seq]
+						nil_field_objs[nil_field_objs.length] = all_fields[temp_id]
+					end
+					nil_field_ids = []
+					nil_field_objs.each do |f_obj|
+						f_name = f_obj.field_name
+						ZohoCRMClient.debug_log("Field name ==> #{field_name}")
+						hv = record.get_hash_values
+						hv[f_name] = nil
+						f_id = f_obj.field_id
+						nil_field_ids[nil_field_ids.length] = f_id
+					end
+					bool, result = mod_obj.update_record(record)
+					#Expectations
+					expect(bool).to eq false
+					expect(result).not_to be_nil
+					expect(result).to be_instance_of(Array)
+					result.should =~ nil_field_ids
+				end
+			end
+		end
+		context "valid update", :focus => true do
+			it "should return true" do
+				list = @module_list.keys
+				list.each do |mod|
+					if @x_mod_list.include? mod then
+						next
+					end
+					ZohoCRMClient.debug_log("Trying for module ===> #{mod}")
+					mod_obj = @apiObj.load_crm_module(mod)
+					record_hash = mod_obj.get_records(1)
+					record = nil
+					id = nil
+					record_hash.each do |i, r|
+						record = r
+						id = i
+					end
+					ZohoCRMClient.debug_log("For id ===> #{id} ")
+					upd_f_size = rand(10)
+					all_fields = mod_obj.get_fields
+					temp_idxs = upd_f_size.times.map{rand(all_fields.length)}
+					ZohoCRMClient.debug_log("Field idxs ===> #{temp_idxs}")
+					all_field_ids = all_fields.keys
+					temp_idxs.each do |idx|
+						temp_id = all_field_ids[idx]
+						field = all_fields[temp_id]
+						f_name = field.field_name
+						value = nil
+						if f_name != "Layout" then
+							value = ZCRMField.get_test_data(field, @apiObj)
+						else
+							value = record.layout_id
+						end
+						datatype = field.data_type
+						if datatype != "ownerlookup" then
+							record.set(field, value)
+						else
+							record.set_owner(value, @apiObj.load_user_data)
+						end
+					end
+					bool, result = mod_obj.update_record(record)
+					#Expectations
+					expect(bool).to eq true
+					expect(result).not_to be_nil
+					expect(result).to be_instance_of(Hash)
+					assert1 = result.has("code")
+					expect(assert1).to eq true
+					code = result["code"]
+					expect(code.downcase).to eq("success")
+				end
 			end
 		end
 	end #describe .update_record

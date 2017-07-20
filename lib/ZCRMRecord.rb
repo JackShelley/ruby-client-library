@@ -30,6 +30,10 @@ class ZCRMRecord
 		end
 	end
 
+	def set_record_id(id)
+		@record_id = id
+	end
+
 	def layout_id
 		return @layout.id
 	end
@@ -37,6 +41,16 @@ class ZCRMRecord
 	def set_layout(layout)
 		if layout.class == ZCRMLayout then
 			@layout = layout
+		end
+	end
+
+	def set_layout_id(layout_id)
+		if @module_obj.nil? then
+			return false
+		end
+		l = @module_obj.get_layout(layout_id)
+		if !l.nil? then
+			@layout = l
 		end
 	end
 
@@ -106,10 +120,71 @@ class ZCRMRecord
 		end
 	end
 
+	def download_attachment
+		#todo comment out
+	end
+
 	def upload_photo
 	end
 
 	def download_photo
+	end
+
+	def get_notes
+		if @module_obj.nil? then
+			print "Please set the module_obj for the record and proceed."
+			return false, {}
+		end
+		# Url : https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
+		return_hash = {}
+		notes_mod_obj = @module_obj.load_crm_module('Notes')
+		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + "Notes"
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		params = {}
+		response = zclient._get(url,params, headers)
+		body = response.body
+		notes_list = Api_Methods._get_list(body, "data")
+		notes_list.each do |json|
+			note_obj = ZCRMRecord.new(notes_mod_obj.api_name, json, notes_mod_obj.get_fields, notes_mod_obj)
+			note_id = note_obj.record_id
+			return_hash[note_id] = note_obj
+		end
+		return true, return_hash
+	end
+
+	def create_note(note_title="", note_content="") ## Pending completion : Will do that once Im done update related records
+		if @module_obj.nil? then
+			print "Please set module_obj for the record and proceed ::: "
+			return false
+		end
+		note_json = {}
+		note_json['Note_Title'] = note_title
+		note_json['Note_Content'] = note_content
+
+		arr = []
+		arr[0] = note_json
+		final_hash = {}
+		final_hash['data'] = arr
+		json = JSON::generate(final_hash)
+		#https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
+		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + 'Notes' 
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		params = {}
+		response = zclient._upsert_post(url, params, headers, json)
+		body = response.body
+		notes = Api_Methods._get_list(body, "data")
+		created_note_ids = []
+		notes.each do |note_json|
+			code = note_json['code']
+			details = note_json['details']
+			note_id = note_json['id']
+			if code == "SUCCESS" then
+				created_note_ids[created_note_ids.length] = note_id
+			end
+		end
+		return created_note_ids
 	end
 
 	def update_note(note_title="", note_content="")
@@ -151,46 +226,116 @@ class ZCRMRecord
 		end
 	end
 
-	def create_note(note_title="", note_content="") ## Pending completion : Will do that once Im done update related records
+	def get_related_records(rel_api_name)
 		if @module_obj.nil? then
-			print "Please set module_obj for the record and proceed ::: "
-			return false
+			ZohoCRMClient.debug_log "Please set ZCRMModule object for this ZCRMRecord object and then try. Thanks!"
+			return false, {}
 		end
-		note_json = {}
-		note_json['Note_Title'] = note_title
-		note_json['Note_Content'] = note_content
+		if @record_id.nil? || @record_id.empty then
+			ZohoCRMClient.debug_log("Record id is empty ")
+			return false, {}
+		end
+		rel_obj = @module_obj.get_related_list_obj(rel_api_name)
+		return_hash = {}
+		rel_module_name = rel_obj.module_name
+		rel_api_name = rel_obj.api_name
+		is_rel_module = rel_obj.is_module
 
-		arr = []
-		arr[0] = note_json
-		final_hash = {}
-		final_hash['data'] = arr
-		json = JSON::generate(final_hash)
-		#https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + 'Notes' 
-		zclient = @module_obj.get_zclient
-		headers = zclient.construct_headers
-		params = {}
-		response = zclient._upsert_post(url, params, headers, json)
-		body = response.body
-		notes = Api_Methods._get_list(body, "data")
-		created_note_ids = []
-		notes.each do |note_json|
-			code = note_json['code']
-			details = note_json['details']
-			note_id = note_json['id']
-			if code == "SUCCESS" then
-				created_note_ids[created_note_ids.length] = note_id
-			end
+		mod_api_obj = nil
+		if is_rel_module then
+			mod_api_obj = @module_obj.load_crm_module(rel_module_name)
 		end
-		return created_note_ids
+
+		url = Constants::DEF_CRMAPI_URL + URL_PATH_SEPERATOR + @module_obj.module_name + URL_PATH_SEPERATOR + @record_id + URL_PATH_SEPERATOR + rel_obj.api_name
+		headers = @zclient.construct_headers
+		params = {}
+		response = @zclient._get(url, params, headers)
+		body = response.body
+		records_json = Api_Methods._get_list(body, "data")
+		records_json.each do |record|
+			record_obj = nil
+			if is_rel_module then
+				record_obj = ZCRMRecord.new(rel_module_name, hash_values, mod_api_obj.get_fields, mod_api_obj)
+				id = record_obj.record_id
+			else
+				record_obj = ZCRMRecord.new(rel_api_name, hash_values, nil, nil)
+				id = record_obj.record_id
+			end
+			return_hash[id] = record_obj
+		end
+		return true, return_hash
 	end
 
-	def update_related_record(related_record_obj)
+	def update_related_record(rel_api_name, related_record_id)
 		#Returns : boolean,Array of failed ids [Array]
 		#https://www.zohoapis.com/crm/v2/Leads/{record_id}/Campaigns/{related_record_id}
 		if @module_obj.nil? then
-			print "Please set module_obj and proceed ::: "
+			ZohoCRMClient.log("Please set module_obj and proceed ::: ")
 			return false, []
+		end
+		if @record_id.nil? || @record_id.empty? then
+			ZohoCRMClient.log("Record id is not set. Please check and proceed ::: ")
+		end
+
+		related_record_obj = @module_obj.get_related_list_obj(rel_api_name)
+		if related_record_obj.nil? then
+			ZohoCRMClient.debug_log("The given related list module name is not a valid one. Please check.")
+			return false, []
+		end
+
+		related_module = related_record_obj.module_name
+
+		if !(related_module == "Campaigns" || related_module == "Products") then
+			ZohoCRMClient.debug_log "Please check the related module and continue again ::: "
+			return false,[]
+		else
+			ZohoCRMClient.debug_log "Related list module is ==> #{related_module}"
+		end
+
+		#related_record_id = related_record_obj.record_id
+		record_id = self.record_id
+		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		params = {}
+		json = related_record_obj.construct_update_hash
+		json_arr = []
+		json_arr[0] = json
+		final_hash = {}
+		final_hash['data'] = json_arr
+		final_json = JSON::generate(final_hash)
+		response = zclient._put(url, {}, headers, final_json)
+		body = response.body
+		json_list = Api_Methods._get_list(body, "data")
+		success_ids = []
+		failure_ids = []
+		json_list.each do |json|
+			code = json['code']
+			details = json['details']
+			id = details['id']
+			if code == "SUCCESS" then
+				success_ids[success_ids.length] = id
+			else
+				failure_ids[failure_ids.length] = id
+			end
+		end
+		if failure_ids.length > 0 then
+			print "There are #{failure_ids.length} failures :::: "
+			return false, failure_ids
+		else
+			return true, failure_ids
+		end
+	end
+
+	def update_related_record1(related_record_obj)
+		#Returns : boolean,Array of failed ids [Array]
+		#https://www.zohoapis.com/crm/v2/Leads/{record_id}/Campaigns/{related_record_id}
+		if @module_obj.nil? then
+			ZohoCRMClient.log("Please set module_obj and proceed ::: ")
+			return false, []
+		end
+		if @record_id.nil? || @record_id.empty? then
+			ZohoCRMClient.log("Record id is not set. Please check and proceed ::: ")
 		end
 
 		related_module = related_record_obj.module_name
@@ -236,30 +381,7 @@ class ZCRMRecord
 		end
 	end
 
-	def get_notes
-		if @module_obj.nil? then
-			print "Please set the module_obj for the record and proceed."
-			return false, {}
-		end
-		# Url : https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
-		return_hash = {}
-		notes_mod_obj = @module_obj.load_crm_module('Notes')
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + "Notes"
-		zclient = @module_obj.get_zclient
-		headers = zclient.construct_headers
-		params = {}
-		response = zclient._get(url,params, headers)
-		body = response.body
-		notes_list = Api_Methods._get_list(body, "data")
-		notes_list.each do |json|
-			note_obj = ZCRMRecord.new(notes_mod_obj.api_name, json, notes_mod_obj.get_fields, notes_mod_obj)
-			note_id = note_obj.record_id
-			return_hash[note_id] = note_obj
-		end
-		return true, return_hash
-	end
-
-	def delink_rl(rel_api_name, rel_id) 
+	def delink_rl(rel_api_name, rel_id)
 		# The document says: 
 		# Module supported are 1) Campaigns 2) Products
 		is_supported_module = false		
@@ -270,7 +392,7 @@ class ZCRMRecord
 			print "Please check the module name, we only support Campaigns and Products."
 			return false
 		end
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + @record_id + URL_PATH_SEPERATOR + rel_api_name + rel_id
+		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_api_name + Constants::URL_PATH_SEPERATOR + rel_id
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		params = {}
@@ -286,63 +408,11 @@ class ZCRMRecord
 		list = Api_Methods._get_list(body, "data")
 		list.each do |json|
 			code = json['code']
-			if code == "SUCCESS" then
+			if code.downcase == "success" then
 				return true
 			end
 		end
 		return false
-	end
-
-	def get_related_records(rel_api_name)
-		if @module_obj.nil? then
-			print "Please set ZCRMModule object for this ZCRMRecord object and then try. Thanks!"
-			return false, {}
-		end
-		rel_obj = get_related_list_obj(rel_api_name)
-		return_hash = {}
-		rel_module_name = rel_obj.module_name
-		rel_api_name = rel_obj.api_name
-		is_rel_module = rel_obj.is_module
-
-		mod_api_obj = nil
-		if is_rel_module then
-			mod_api_obj = @module_obj.load_crm_module(rel_module_name)
-		end
-
-		url = Constants::DEF_CRMAPI_URL + URL_PATH_SEPERATOR + @module_obj.module_name + URL_PATH_SEPERATOR + @record_id + URL_PATH_SEPERATOR + rel_obj.api_name
-		headers = @zclient.construct_headers
-		params = {}
-		response = @zclient._get(url, params, headers)
-		body = response.body
-		records_json = Api_Methods._get_list(body, "data")
-		records_json.each do |record|
-			record_obj = nil
-			if is_rel_module then
-				record_obj = ZCRMRecord.new(rel_module_name, hash_values, mod_api_obj.get_fields, mod_api_obj)
-				id = record_obj.record_id
-			else
-				record_obj = ZCRMRecord.new(rel_api_name, hash_values, nil, nil)
-				id = record_obj.record_id
-			end
-			return_hash[id] = record_obj
-		end
-		return true, return_hash
-	end
-
-	def get_related_list_obj(rel_api_name)
-		return_rel_obj = nil
-		if @module_obj.nil? then
-			print "Please set module obj"
-			return false,return_rel_obj
-		end
-		rel_hash = @module_obj.related_list_hash
-		rel_hash.each do |rel|
-			api_name = rel['api_name']
-			if api_name == rel_api_name then
-				return_rel_obj = RelatedList.new(rel)
-				return return_rel_obj
-			end
-		end
 	end
 
 	def get_module_obj
@@ -359,7 +429,7 @@ class ZCRMRecord
 		end
 	end
 
-	def get_required_fields1
+	def get_required_fields1 #todo comment out
 		if !@required_fields.empty? then
 			return @required_fields
 		else

@@ -124,7 +124,8 @@ class ZohoCRMClient
 		begin
 			response = RestClient.get(url, headers)
 		rescue => e
-			ZohoCRMClient.debug_log("Exception class, self ===> #{e.class}, #{e}")
+			ZohoCRMClient.debug_log("Exception occurred while trying for ==> #{url} \n
+				Exception class, self ===> #{e.class}, #{e}")
 		 	return handle_response(e)
 		end
 		return handle_response(response)

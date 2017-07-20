@@ -39,94 +39,31 @@ class ZCRMModule
 		@fields = {}
 		@required_fields = [] # Array of field ids
 		@layouts = []
+		@related_lists = {}
+		populate_related_lists(hash_values)
+
 	end
 
-=begin
-	def get_test_data(field_obj, apiObj)
-		field_name = field_obj.field_name
-		f_id = field_obj.field_id
-		data_type = field_obj.get_datatype
-		created_source = field.created_source
-		value = nil
-		if data_type == "text"
-			value = "Non_empty_text"
-		elsif data_type == "integer"
-			value = 100
-		elsif data_type == "picklist"
-			picklist_values = field_obj.get_picklist_values
-			pick_value = picklist_values[0]
-			if pick_value.nil? then
-				ZohoCRMClient.debug_log("Pick value is nil ===> #{field_name}, #{data_type}, #{f_id}")
-			end
-			value = pick_value['actual_value']
-		elsif data_type == "ownerlookup"
-			userObj = apiObj.load_user_data
-			userId = userObj.keys[0]
-			value = userId
-		elsif data_type == "currency"
-			value = 7
-		elsif data_type == "phone"
-			value = "10000"
-		elsif data_type == "email"
-			value = "randomemail@hotmail.com"
-		elsif data_type == "website"
-			value = "google.come"
-		elsif data_type == "boolean"
-			value = true
-		elsif data_type == "string"
-			value = "Non_empty_string"
-		elsif data_type == "date"
-			#Format for date : (%Y-%m-%d)
-			d = DateTime.now
-			cur_date = d.strftime("%Y-%m-%d")
-			next_month_date = d.next_month.strftime("%Y-%m-%d")
-			value = next_month_date
-		elsif data_type == "multiselectpicklist"
-			res = []
-			picklist_values = field_obj.get_picklist_values
-			pick_value = picklist_values[0]
-			temp = pick_value['actual_value']
-			res[0] = temp
-			pick_value = picklist_values[1]
-			temp = pick_value['actual_value']
-			res[1] = temp
-			value = res
-		elsif data_type == "datetime"
-			#TODO: Find out the format for datetime
-			#Format for datetime : (%Y-%m-%dT%H:%M:%S+05:30)
-			#Sample datetime from get_records api response 2010-05-07T20:10:00+05:30
-
-			d = DateTime.now
-			cur_date = d.strftime("%Y-%m-%dT%H:%M:%S+05:30")
-			next_month_date = d.next_month.strftime("%Y-%m-%dT%H:%M:%S+05:30")
-			value = next_month_date
-		elsif data_type == "textarea"
-			value = "Non_empty_textarea"
-		elsif data_type == "double"
-			value = 10.2
-		elsif data_type == "bigint" && !(field_name == "Layout" && created_source == "default")
-			value = 10000
-		elsif data_type == "lookup"
-			lookup_json = field_obj.get("lookup")
-			values = field_obj.get_hash_values
-
-			temp_json = JSON.generate(values)
-			temp_fp = "/Users/kamalkumar/test/temp_file.json"
-			temp_file = open(temp_fp, 'w')
-			temp_file.write(temp_json)
-
-			module_name = lookup_json['module']
-			if module_name == "se_module" then
-				module_name = "Leads"
-			end
-			obj = apiObj.load_crm_module(module_name)
-			records = obj.get_records(1)
-			lookup_id = records.keys[0]
-			value = lookup_id
+	def populate_related_lists(json_hash)
+		if !json_hash.has_key?("related_lists") then
+			return
 		end
-		return value
+		rls = json_hash["related_lists"]
+		if rls.length > 0 then
+			rls.each do |rl|
+				rl = rls[0]
+				rl_obj = RelatedList.new(rl)
+				apiname = rl_obj.api_name
+				@related_lists[apiname] = rl_obj
+			end
+		end
+		if !@related_lists.empty then
+			ZohoCRMClient.debug_log("Related list have been populated, printing them here for debugging \n
+				#{@related_lists}")
+		else
+			ZohoCRMClient.debug_log("There are no related lists: ==> #{@related_lists}")
+		end
 	end
-=end
 
 	def set_layouts(layouts)
 		@layouts = layouts
@@ -137,6 +74,16 @@ class ZCRMModule
 		result = nil
 		@layouts.each do |layout|
 			if layout.is_default then
+				result = layout
+			end
+		end
+		return result
+	end
+
+	def get_layout(layout_id)
+		result = nil
+		@layouts.each do |layout|
+			if layout.id == layout_id then
 				result = layout
 			end
 		end
@@ -252,15 +199,39 @@ class ZCRMModule
 		return Api_Methods.load_crm_module(module_name, meta_folder)
 	end
 
-	def get_related_list(rel_obj)
-		#https://www.zohoapis.com/crm/v2/Leads/{record_id}/{Related_list_apiname}
-		#params: record_id, Related_list_apiname [Part of the url]
-		#module_data is not there for some related list modules,
+	def get_related_records(rel_api_name, id)
+		#typing finish this also
+		record = self.get_new_record
+		record.set_record_id(id)
+		return record.get_related_records(rel_api_name)
+	end
+
+	def get_related_list_obj(rel_api_name)
+		if @related_lists.empty? then
+			self.populate_related_lists
+		end
+		if @related_lists.empty? then
+			return nil
+		end
+		if !@related_lists.has_key?(rel_api_name) then
+			ZohoCRMClient.debug_log("Current module ==> #{@api_name} does not have a related list section named ==> #{rel_api_name}")
+			return nil
+		end
+		return @related_lists[rel_api_name]
+	end
+
+
+=begin
+	#module_data is not there for some related list modules,
 			#In anitha's account: 
 			#1_Zoho_Support
 			#2_Social
 			#3_Visits_Zoho_Livedesk
 			#4_Zoho_Survey
+
+	def get_related_list(rel_obj)
+		#https://www.zohoapis.com/crm/v2/Leads/{record_id}/{Related_list_apiname}
+		#params: record_id, Related_list_apiname [Part of the url]
 
 		return_hash = {}
 		rel_module_name = rel_obj.module_name
@@ -291,6 +262,8 @@ class ZCRMModule
 		end
 		return return_hash
 	end
+
+=end
 
 	def module_list_from_local #to be finished after the current work
 		return module_list
@@ -697,23 +670,44 @@ class ZCRMModule
 	end
 
 	def update_record(record)
+		ZohoCRMClient.debug_log("Inside update_record, passed in record ==> #{record} ")
 		if record.nil? || record.class != ZCRMRecord then
 			return false, nil
 		end
-		update_hash = record.construct_update_hash
 		id = record.record_id
 		if id.nil? then
 			return false, nil
 		end
+		payload = nil
+		bool, update_hash = record.construct_update_hash
+		if !bool then
+			ZohoCRMClient.debug_log("Construct update_hash returned false : Hence returning nil ")
+			return false, nil
+		end
+		arr = []
+		arr[0] = update_hash
+		final_hash = {}
+		final_hash["data"] = arr
+		payload = JSON.generate(final_hash)
+		ZohoCRMClient.debug_log("final payload ===> #{payload}")
 		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		ZohoCRMClient.debug_log("URL ==> #{url}")
 		headers = @zclient.construct_headers
-		response = @zclient._put(url, {}, headers)
+		response = @zclient.safe_update_put(url, headers, payload)
 		body = response.body
 		ZohoCRMClient.debug_log("Update record response ==> #{body}")
 		temp = Api_Methods._get_list(body, "data")
 		returned_record = temp[0]
-		record.record_error_fields(returned_record)
-		return record
+		if !returned_record.nil? && returned_record.has_key?("code") then
+			code = returned_record["code"]
+			if code.downcase == "success" then
+				return true, returned_record
+			else
+				return false, returned_record
+			end
+		else
+			return false, returned_record
+		end
 	end
 
 	def delete(record_id)
