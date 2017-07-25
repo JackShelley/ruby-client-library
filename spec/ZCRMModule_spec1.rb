@@ -78,9 +78,14 @@ layouts - jsonArray [array of layouts]
 			Purchase orders, Quotes, 
 
 =end
+	
+	describe ".delete_record" do
+		#This function will not be used mostly, because you can do the same functionality using delete_records
+		
+	end
 
 	describe ".update_record" do
-		context "record is nil" do
+		context "record is nil", :focus => true do
 			it "should return false, nil" do
 				record = nil
 				list = @module_list.keys
@@ -199,7 +204,7 @@ layouts - jsonArray [array of layouts]
 					expect(bool).to eq true
 					expect(result).not_to be_nil
 					expect(result).to be_instance_of(Hash)
-					assert1 = result.has("code")
+					assert1 = result.has_key?("code")
 					expect(assert1).to eq true
 					code = result["code"]
 					expect(code.downcase).to eq("success")

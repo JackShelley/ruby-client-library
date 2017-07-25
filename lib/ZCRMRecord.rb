@@ -1,9 +1,4 @@
 require 'ZohoCRM_Client'
-require 'json'
-require 'yaml'
-require 'rest-client'
-require 'time'
-require 'net/http/post/multipart'
 
 class ZCRMRecord
 
@@ -27,6 +22,15 @@ class ZCRMRecord
 		@module_obj = mod_obj
 		if !mod_obj.nil? then
 			@layout = mod_obj.default_layout
+		end
+		@is_related_list = false
+		@related_list_obj = nil
+	end
+
+	def set_related_list_obj(rel_obj)
+		if !rel_obj.nil? && rel_obj.class == RelatedList then
+			@is_related_list = true
+			@related_list_obj = rel_obj
 		end
 	end
 
@@ -80,56 +84,88 @@ class ZCRMRecord
 	def get_attachments
 		#Url: https://www.zohoapis.com/crm/v2/{module}/{record_id}/Attachments
 		if @module_obj.nil? then
-			print "Please set module object before proceeding ::: " + @module_obj
+			ZohoCRMClient.debug_log("Please set module object before proceeding ::: ")
 			return false, {}
+		end
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is not set ::: ")
+			return false,{}
 		end
 		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
 		zclient = @module_obj.get_zclient
-		headers = zclient.headers
+		headers = zclient.construct_headers
 		params = {}
-		response = zclient.get(url, params, headers)
+		response = zclient.safe_get(url, params, headers)
+		if response.nil? then
+			throw BadRequestException.new
+		end
+		code = response.code.to_i
+		if code == 204 then
+			return true, {}
+		end
+		ZohoCRMClient.debug_log("Returned response for get attachments ===> #{response}")
 		body = response.body
+		ZohoCRMClient.debug_log("Body ===> #{body}")
 		list = Api_Methods._get_list(body, "data")
 		result_data = {}
 		list.each do |json|
 			id = json['id']
 			result_data[id] = json
 		end
-		return result_data
+		return true, result_data
 	end
 
 	def upload_attachment(file_path, file_type="image/pdf")
 		if @module_obj.nil? then
 			ZohoCRMClient.debug_log("Please set module_obj and proceed ::: ")
-			return false
+			return false, nil
+		end
+
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("The record id is not set ::: ")
+			return false, nil
+		end
+
+		if file_path.nil? || file_path.empty? then
+			return false, nil
+		end
+
+		if file_type.nil? || file_type.empty? then
+			return false, nil
 		end
 
 		url_str = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
+		ZohoCRMClient.debug_log("the url ==> #{url_str}")
 		zclient = @module_obj.get_zclient
-		headers = zclient.headers
+		headers = zclient.construct_headers
 		params = {}
 
 		file = nil
 		file_name = nil
 		begin
 			file = File.open(file_path)
-			temp_arr = file.split("/")
-			file_name = temp_arr[temp_arr.length-1]
 		rescue => e
 			ZohoCRMClient.debug_log("Error while opening file ==> #{file_path}")
 			ZohoCRMClient.debug_log("Printing exception ==> #{e}")
-			return false
+			return false, nil
 		end
+		temp_arr = file_path.split("/")
+		file_name = temp_arr[temp_arr.length-1]
 
 		url = URI.parse(url_str)
 		http = Net::HTTP.new(url.host, url.port)
 		http.use_ssl = (url.scheme == "https")
 		req = Net::HTTP::Post::Multipart.new url.path, "file" => UploadIO.new(file, file_type, file_name)
 		headers.each do |key, value|
+			ZohoCRMClient.debug_log("Header Key value ===> #{key}, #{value}")
 			req.add_field(key, value)
 		end
 		res = http.request(req)
 		code = res.code.to_i
+		body = res.body
+		ZohoCRMClient.debug_log("code ===> #{code}")
+		ZohoCRMClient.debug_log("body ===> #{body}")
+
 		body = nil
 		if code == 401 then
 			if zclient.revoke_token then
@@ -172,48 +208,74 @@ class ZCRMRecord
 	end
 
 	def download_attachment(attachment_id, file_name="default_file_name")
+		orig_name = file_name
 		#todo typing here
 		if attachment_id.nil? || attachment_id.to_s.empty? then
-			return false
+			return false, nil
 		end
 		if @module_obj.nil? then
-			return false
+			ZohoCRMClient.debug_log("Module object is not set. Please check and proceed ")
+			return false, nil
 		end
-		url_str = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is nil. Please check and proceed")
+			return false, nil
+		end
+		url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
 		Constants::URL_PATH_SEPERATOR + "Attachments" + Constants::URL_PATH_SEPERATOR + attachment_id
+		ZohoCRMClient.debug_log("URL ==> #{url_str}")
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
-		response = zclient.safe_get(url, {}, headers)
+		response = zclient.safe_get(url_str, {}, headers)
 		if !response.nil? && response.class == RestClient::Response then
 			code = response.code.to_i
 			if code == 200 then
 				body = response.body
 				counter = 1
 				while File.exists?(file_name) do
-					file_name = file_name + "(" + counter + ")"
+					file_name = orig_name + "(" + counter.to_s + ")"
 					counter = counter + 1
 				end
 				file = File.open(file_name, "w")
 				file.write(body)
+				return true, file_name
 			else
-				return false
+				return false, nil
 			end
 		else
-			return false
+			return false, nil
 		end
 	end
 
 	def upload_photo(image_path, type="image/jpeg")
-		
-		url_str = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		if @module_obj.nil? then
+			ZohoCRMClient.debug_log("Module object is not set. Please set it and proceed.")
+			return false
+		end
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is nil. Please set it and proceed.")
+			return false
+		end
+		if image_path.nil? || image_path.empty? then
+			return false
+		end
+		if type.nil? || type.empty? then
+			return false
+		end
+		if @module_name != "Leads" && @module_name != "Contacts" then
+			return false
+		end
+
+		url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
 		url = URI.parse(url_str)
 		begin
 			img_file = File.open(image_path)
 		rescue => e
 			ZohoCRMClient.debug_log("Exception while opening given file ==> #{img_file} ")
 			ZohoCRMClient.debug_log("Priting exception ==> #{e}")
+			return false
 		end
-		file_name = ZCRMRecord.get_file_name(img_file)
+		file_name = ZCRMRecord.get_file_name(image_path)
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 
@@ -261,6 +323,15 @@ class ZCRMRecord
 	end
 
 	def download_photo(file_name = "default_image_name")
+		orig_name = file_name
+		if @module_obj.nil? then
+			ZohoCRMClient.debug_log("Module object is not set. Please check and proceed.")
+			return false
+		end
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is nil. Please check and proceed.")
+			return false
+		end
 		module_name = @module_obj.module_name
 		if module_name != "Leads" && module_name != "Contacts" then
 			ZohoCRMClient.debug_log("Download and upload photo is supported only for Leads and Contact modules")
@@ -270,6 +341,9 @@ class ZCRMRecord
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		response = zclient.safe_get(url, {}, headers)
+		if response.nil? then
+			return false
+		end
 		code = response.code.to_i
 		file = nil
 		body = nil
@@ -277,12 +351,16 @@ class ZCRMRecord
 			body = response.body
 			counter = 1
 			while File.exists?(file_name) do
-				file_name = file_name + "(" + counter + ")"
+				file_name = orig_name + "(" + counter.to_s + ")"
 				counter = counter + 1
 			end
 			file = File.open(file_name, "w")
 			file.write(body)
 			file.close
+			return true, file_name
+		elsif code == 204 then
+			ZohoCRMClient.debug_log("204 No Content")
+			return true, ""
 		else
 			ZohoCRMClient.debug_log("Response status is ==> #{code}")
 			return false
@@ -292,34 +370,64 @@ class ZCRMRecord
 
 	def get_notes
 		if @module_obj.nil? then
-			print "Please set the module_obj for the record and proceed."
+			ZohoCRMClient.debug_log "Please set the module_obj for the record and proceed."
 			return false, {}
 		end
-		# Url : https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is nil. Please check and proceed.")
+			return false, {}
+		end
 		return_hash = {}
-		notes_mod_obj = @module_obj.load_crm_module('Notes')
 		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		ZohoCRMClient.debug_log("URL ==> #{url}")
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		params = {}
-		response = zclient._get(url,params, headers)
-		body = response.body
-		notes_list = Api_Methods._get_list(body, "data")
-		notes_list.each do |json|
-			note_obj = ZCRMRecord.new(notes_mod_obj.api_name, json, notes_mod_obj.get_fields, notes_mod_obj)
-			note_id = note_obj.record_id
-			return_hash[note_id] = note_obj
+		response = zclient.safe_get(url, params, headers)
+		if response.nil? then
+			return false, {}
 		end
-		return true, return_hash
+		code = response.code.to_i
+		ZohoCRMClient.debug_log("Status code ===> #{code}")
+		if code == 200 then
+			body = response.body
+			notes_list = Api_Methods._get_list(body, "data")
+			notes_list.each do |json|
+				#note_obj = ZCRMRecord.new(notes_mod_obj.api_name, json, notes_mod_obj.get_fields, notes_mod_obj)
+				note_obj = ZCRMNote.new(json)
+				note_id = note_obj.id
+				return_hash[note_id] = note_obj
+			end
+			return true, return_hash
+		elsif code == 204 then
+			return true, {}
+		else
+			ZohoCRMClient.debug_log("Improper status code ==> #{code}")
+			return false, {}
+		end
+				
 	end
 
-	def create_note(note_title="", note_content="") ## Pending completion : Will do that once Im done update related records
+	def create_note(note_title="", note_content="")
 		if @module_obj.nil? then
-			print "Please set module_obj for the record and proceed ::: "
+			ZohoCRMClient.debug_log("Please set module_obj for the record and proceed ::: ")
 			return false
 		end
+
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record id is nil. Please check and proceed.")
+			return false
+		end
+
+		if note_content.nil? || note_content.empty? then
+			return false
+		end
+		
+
 		note_json = {}
-		note_json['Note_Title'] = note_title
+		if note_title.nil? then
+			note_json['Note_Title'] = note_title
+		end
 		note_json['Note_Content'] = note_content
 
 		arr = []
@@ -327,26 +435,90 @@ class ZCRMRecord
 		final_hash = {}
 		final_hash['data'] = arr
 		json = JSON::generate(final_hash)
-		#https://www.zohoapis.com/crm/v2/{Module}/{record_id}/Notes
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + 'Notes' 
+		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + 'Notes' 
+		ZohoCRMClient.debug_log("The URL ==> #{url}")
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		params = {}
-		response = zclient._upsert_post(url, params, headers, json)
+		ZohoCRMClient.debug_log("JSON for create note ==> #{json}")
+		begin
+			response = zclient.safe_upsert_post(url, params, headers, json)
+		rescue => e
+			if e.class == BadRequestException then
+				ZohoCRMClient.debug_log("My guess was right => ")
+			end
+			return false, {}
+		end
+		code = response.code.to_i
+		if code > 204 then
+			ZohoCRMClient.debug_log("Invalid status code while creating note ==> #{code}")
+			return false, {}
+		end
 		body = response.body
 		notes = Api_Methods._get_list(body, "data")
-		created_note_ids = []
+		return_hash = {}
 		notes.each do |note_json|
-			code = note_json['code']
-			details = note_json['details']
-			note_id = note_json['id']
-			if code == "SUCCESS" then
-				created_note_ids[created_note_ids.length] = note_id
-			end
+			note_obj = ZCRMNote.new(note_json)
+			id = note_obj.id
+			return_hash[id] = note_obj
 		end
-		return created_note_ids
+		return true, return_hash
+
 	end
 
+	def update_notes(notes={})
+		if @module_obj.nil? then
+			ZohoCRMClient.debug_log("Module object is not set. Please check and proceed. ")
+			return false
+		end
+		if @record_id.nil? then
+			ZohoCRMClient.debug_log("Record object does not have record_id. Please check and proceed. ")
+			return false
+		end
+		if !notes.nil? && !notes.empty? then
+			return false, "There are not any notes to update"
+		end
+		sent_ids = []
+		notes.each do |id, note|
+			note_hash = note.construct_update_hash
+			arr = []
+			arr[arr.length] = note_hash
+			final_hash = {}
+			final_hash["data"] = arr
+			final_json = JSON.generate(final_hash)
+			sent_ids[sent_ids.length] = id
+		end
+		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		zclient = @module_obj.get_zclient
+		headers = zclient.construct_headers
+		response = zclient.safe_update_put(url, headers, final_json)
+		if response.nil? then
+			return false
+		end
+		code = response.code.to_i
+		if code > 204 then
+			ZohoCRMClient.debug_log("update_put returned with improper code ==> #{code}")
+			return false, "Improper status code"
+		end
+		body = response.body
+		list = Api_Methods._get_list(body, "data")
+		success_ids = []
+		list.each do |note_json|
+			message = note_json["code"]
+			if message.downcase == "success" then
+				details = note_json["details"]
+				id = details["id"]
+				success_ids[success_ids.length] = id
+			else
+				ZohoCRMClient.debug_log("Error record while updating notes ==> #{message}")
+			end
+		end
+		failure_ids = sent_ids - success_ids
+		return success_ids, failure_ids
+
+	end
+
+=begin
 	def update_note(note_title="", note_content="")
 		if @module_obj.nil? then
 			print "Please set module_obj for the record and proceed ::: "
@@ -386,6 +558,8 @@ class ZCRMRecord
 		end
 	end
 
+=end
+
 	def get_related_records(rel_api_name)
 		if @module_obj.nil? then
 			ZohoCRMClient.debug_log "Please set ZCRMModule object for this ZCRMRecord object and then try. Thanks!"
@@ -406,7 +580,7 @@ class ZCRMRecord
 			mod_api_obj = @module_obj.load_crm_module(rel_module_name)
 		end
 
-		url = Constants::DEF_CRMAPI_URL + URL_PATH_SEPERATOR + @module_obj.module_name + URL_PATH_SEPERATOR + @record_id + URL_PATH_SEPERATOR + rel_obj.api_name
+		url = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_obj.api_name
 		headers = @zclient.construct_headers
 		params = {}
 		response = @zclient._get(url, params, headers)
@@ -416,9 +590,11 @@ class ZCRMRecord
 			record_obj = nil
 			if is_rel_module then
 				record_obj = ZCRMRecord.new(rel_module_name, hash_values, mod_api_obj.get_fields, mod_api_obj)
+				record_obj.set_related_list_obj(rel_obj)
 				id = record_obj.record_id
 			else
 				record_obj = ZCRMRecord.new(rel_api_name, hash_values, nil, nil)
+				record_obj.set_related_list_obj(rel_obj)
 				id = record_obj.record_id
 			end
 			return_hash[id] = record_obj

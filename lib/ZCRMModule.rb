@@ -52,7 +52,7 @@ class ZCRMModule
 		if rls.length > 0 then
 			rls.each do |rl|
 				rl = rls[0]
-				rl_obj = RelatedList.new(rl)
+				rl_obj = RelatedList.new(rl, self)
 				apiname = rl_obj.api_name
 				@related_lists[apiname] = rl_obj
 			end
@@ -93,10 +93,13 @@ class ZCRMModule
 	def get_required_fields(layout_id = nil)
 		layout = nil
 		if layout_id.nil? then
+			ZohoCRMClient.debug_log("the given layout id is nil ===> ")
 			layout = self.default_layout
+			ZohoCRMClient.debug_log("The default_layout received ==> #{layout}")
 			if layout.nil? then
 				ZohoCRMClient.debug_log("Default layout is nil ==> \n 
 					This happens because the status has other values than 0 and 1")
+				return default_required_fields
 			end
 		else
 			@layouts.each do |l|
@@ -106,6 +109,7 @@ class ZCRMModule
 				end
 			end
 		end
+
 		ZohoCRMClient.debug_log("Default layout id ===> #{layout.id} ")
 		return layout.req_field_ids
 	end
@@ -274,14 +278,14 @@ class ZCRMModule
 		rel_arr = @hash_values['related_lists']
 		rel_arr.each do |rel|
 			api_name = rel['api_name']
-			rel_obj = RelatedList.new(rel)
+			rel_obj = RelatedList.new(rel, self)
 			return_hash[api_name] = rel_obj
 		end
 		return return_hash
 	end
 
 	def get_new_record
-		r_fields = self.get_required_fields#todo this line may not be needed, because we dont use populate required field anymore
+		#r_fields = self.get_required_fields#todo this line may not be needed, because we dont use populate required field anymore
 		fields = self.get_fields
 		new_record = ZCRMRecord.new(self.module_name, {}, fields, self)
 		return new_record
@@ -306,7 +310,8 @@ class ZCRMModule
 		return @required_fields
 	end
 
-	def populate_required_fields
+	def default_required_fields
+		r_fields = []
 		layouts = @hash_values['layouts']
 		layouts.each do |layout_hsh|
 			sections = layout_hsh["sections"]
@@ -318,11 +323,33 @@ class ZCRMModule
 						field_id = field["id"]
 						field_obj = @fields[field_id]
 						field_obj.make_required
-						@required_fields[@required_fields.length] = field_id
+						r_fields[r_fields.length] = field_id
 					end
 				end
 			end
 		end
+		return r_fields
+	end
+
+	def populate_required_fields
+		r_fields = []
+		layouts = @hash_values['layouts']
+		layouts.each do |layout_hsh|
+			sections = layout_hsh["sections"]
+			sections.each do |section_hsh|
+				fields = section_hsh["fields"]
+				fields.each do |field|
+					required = field["required"]
+					if required then
+						field_id = field["id"]
+						field_obj = @fields[field_id]
+						field_obj.make_required
+						r_fields[r_fields.length] = field_id
+					end
+				end
+			end
+		end
+		return r_fields
 	end
 
 	def construct_GET_params(sort_order, per_page, approved, converted, fields, page)
@@ -715,7 +742,7 @@ class ZCRMModule
 			return false
 		end
 		#https://www.zohoapis.com/crm/v2/{Module}/{EntityID}
-		url = Constants::DEF_CRMAPI_URL + URL_PATH_SEPERATOR + module_name + URL_PATH_SEPERATOR + record_id
+		url = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + module_name + Constants::URL_PATH_SEPERATOR + record_id
 		headers = @zclient.construct_headers
 		response = @zclient._delete(url, {}, headers)
 		body = response.body
@@ -724,7 +751,7 @@ class ZCRMModule
 		code = json.code
 		id = json['details'].id
 		if id == record_id then
-			return true 
+			return true
 		else
 			return false
 		end
@@ -765,7 +792,7 @@ class ZCRMModule
 end
 
 class RelatedList
-	def initialize(json_hash)
+	def initialize(json_hash, parent_module_obj)
 		@display_label = json_hash['display_label']
 		@visible = json_hash['visible']
 		@api_name = json_hash['api_name']
@@ -779,11 +806,15 @@ class RelatedList
 		else
 			@is_module = true
 		end
+		@parent_module_obj = parent_module_obj
 	end
 	def api_name
 		return @api_name
 	end
 	def is_module
 		return @is_module
+	end
+	def get_parent
+		return @parent_module_obj
 	end
 end

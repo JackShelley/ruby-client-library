@@ -2,13 +2,15 @@ require "ZohoCRM_Client/version"
 require 'Constants'
 require 'rest-client'
 require 'time'
+require 'net/http/post/multipart'
+require 'json'
 require 'ZohoAPIMethod'
 require 'ZCRMModule'
 require 'ZCRMField'
 require 'ZCRMRecord'
 require 'ZohoException'
 require 'ZCRMLayout'
-require 'net/http/post/multipart'
+require 'ZCRMNote'
 
 class ZohoCRMClient
 
@@ -120,10 +122,14 @@ class ZohoCRMClient
 		if !params.empty? then
 			headers["params"] = params
 		end
+		#ZohoCRMClient.debug_log("Inside _get function")
+		#ZohoCRMClient.debug_log("URL ===> #{url}")
 		#ZohoCRMClient.debug_log("Params ===> #{params}")
 		#ZohoCRMClient.debug_log("caller ===> #{caller[0]}\n#{caller[1]}\n#{caller[2]}")
 		begin
 			response = RestClient.get(url, headers)
+			#ZohoCRMClient.debug_log("Resonse code, class, body ==> #{response.code}, #{response.class}, #{response.body}")
+			#ZohoCRMClient.debug_log("Response ===> #{response}")
 		rescue => e
 			ZohoCRMClient.debug_log("Exception occurred while trying for ==> #{url} \n
 				Exception class, self ===> #{e.class}, #{e}")
