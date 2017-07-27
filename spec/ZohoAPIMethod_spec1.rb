@@ -166,10 +166,17 @@ tonite's task.
 				#ZohoCRMClient.debug_log("Printing result for the refresh_metadata ===> #{res}")
 				#ZohoCRMClient.debug_log("Print returned failed modules ===> #{f_mods}")
 				expect(res).to eq false
-				assert1 = ((improper_modules - f_mods) == (f_mods - improper_modules)) && (improper_modules.length == f_mods.length)
+				#improper_modules.should =~ f_mods
+				#assert1 = ((improper_modules - f_mods) == (f_mods - improper_modules)) && (improper_modules.length == f_mods.length)
 				#ZohoCRMClient.debug_log("Printing assert1 ===> #{assert1}")
 				#ZohoCRMClient.debug_log("#{(improper_modules - f_mods) == (f_mods - improper_modules)}")
 
+				assert1 = true
+				improper_modules.each do |mod|
+					if !f_mods.include?(mod) then
+						assert1 = false
+					end
+				end
 				expect(assert1).to eq true
 				res, f_mods = check_module_metadata(@module_list, location)
 				expect(res).to eq true
@@ -262,7 +269,7 @@ tonite's task.
 				expect(orgObj).to be_nil
 			end
 		end
-		context "a valid call", :focus => true do
+		context "a valid call" do
 			it "should return a hash map of users" do
 				orgObj = @apiObj.load_org_data
 				expect(orgObj).not_to be_nil

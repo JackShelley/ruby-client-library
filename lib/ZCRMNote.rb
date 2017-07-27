@@ -56,11 +56,13 @@ class ZCRMNote
 	end
 	def construct_update_hash
 		result = {}
-		if !@title.nil? && !@title.empty? then
+		if !@note_title.nil? && !@note_title.empty? then
 			result["Note_Title"] = @note_title
 		end
 		result["Note_Content"] = @note_content
 		result["id"] = @id
+		ZohoCRMClient.debug_log("Update hash ==> #{result}")
+		return result
 	end
 
 

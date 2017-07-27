@@ -8,6 +8,7 @@ RSpec.describe ZCRMModule do
 	def save_modulelist_from_db(obj, fp=@module_list_file)
 		Meta_data::dump_yaml(obj, fp)
 	end
+
 	before do
 		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@default_meta_folder = "/Users/kamalkumar/spec_meta_folder/"
@@ -25,7 +26,24 @@ RSpec.describe ZCRMModule do
 		@x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Approvals"] #, "Travels"]
 		@x_data_type = ["autonumber"]
 		@all_field_x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Potentials", "Deals", "Approvals"]
+		@search_mods = []
+		@non_search_mods = []
+		populate_search_mods()
 
+	end
+
+	def populate_search_mods
+		list = @module_list.keys
+		list.each do |mod|
+			mod_obj = @apiObj.load_crm_module(mod)
+			hv = mod_obj.get_hash_values
+			temp = hv["global_search_supported"]
+			if temp then
+				@search_mods[@search_mods.length] = mod
+			else
+				@non_search_mods[@non_search_mods.length] = mod
+			end
+		end
 	end
 
 
@@ -79,13 +97,118 @@ layouts - jsonArray [array of layouts]
 
 =end
 	
-	describe ".delete_record" do
-		#This function will not be used mostly, because you can do the same functionality using delete_records
-		
+	describe ".get_deleted_records" do
+		context "type is not valid" do
+			it "should return false" do
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.get_deleted_records(nil)
+					expect(bool).to eq false
+					expect(result).to be_nil
+					bool, result = mod_obj.get_deleted_records("")
+					expect(bool).to eq false
+					expect(result).to be_nil
+					bool, result = mod_obj.get_deleted_records("Unsupported_type")
+					expect(bool).to eq false
+					expect(result).to be_nil
+				end
+			end
+		end
+		context "type = recycle" do
+			it "returns true and a hash, type in every returned json should be recycle " do
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.get_deleted_records("recycle")
+					expect(bool).to eq true
+					expect(result).to be_instance_of(Hash)
+					if !result.empty? then
+						result.each do |id, values|
+							type = values["type"]
+							expect(type).to eq "recycle"
+							t_id = values["id"]
+							expect(id).to eq t_id
+						end
+					end
+				end
+			end
+		end
+		context "type = permanent" do
+			it "return true and a hash, type in every returned json should be permanent" do
+				list = @module_list.keys
+				list.each do |mod|
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.get_deleted_records("permanent")
+					expect(bool).to eq true
+					expect(result).to be_instance_of(Hash)
+					if !result.empty? then
+						result.each do |id, values|
+							type = values["type"]
+							expect(type).to eq "permanent"
+							t_id = values["id"]
+							expect(id).to eq t_id
+						end
+					end
+				end
+			end
+		end
+	end
+
+	describe ".search_records" do
+		context "search is not supported for this module" do
+			it "should return false" do
+				list = @module_list.keys
+				list.each do |mod|
+					if !@non_search_mods.include?(mod) then
+						next
+					end
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.search_records("word")
+					expect(bool).to eq false
+				end
+			end
+		end
+		context "inputs params are not valid " do
+			it "should return false" do
+				list = @module_list.keys
+				list.each do |mod|
+					if @non_search_mods.include?(mod) then
+						next
+					end
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.search_records
+					expect(bool).to eq false
+				end
+			end
+		end
+		context "valid search" do
+			it "should return true and a hash " do
+				list = @module_list.keys
+				list.each do |mod|
+					if @non_search_mods.include?(mod) then
+						next
+					end
+					ZohoCRMClient.debug_log("Trying for module ==> #{mod}")
+					mod_obj = @apiObj.load_crm_module(mod)
+					bool, result = mod_obj.search_records("test")
+					expect(bool).to eq true
+					if result.size > 0 then
+						result.each do |r_id, r_obj|
+							expect(r_id).not_to be_nil
+							expect(r_id).not_to be_empty
+							expect(r_obj).not_to be_nil
+							expect(r_obj).to be_instance_of(ZCRMRecord)
+							expect(r_id).to eq(r_obj.record_id)
+						end
+					end
+				end
+			end
+		end
 	end
 
 	describe ".update_record" do
-		context "record is nil", :focus => true do
+		context "record is nil" do
 			it "should return false, nil" do
 				record = nil
 				list = @module_list.keys
@@ -124,7 +247,7 @@ layouts - jsonArray [array of layouts]
 				end
 			end
 		end
-		context "Some required fields do not have value" do 
+		context "Some required fields do not have value", :focus => true do 
 		#todo commentout: this case may not happen
 			it "should return false, nil" do
 				list = @module_list.keys
@@ -160,7 +283,7 @@ layouts - jsonArray [array of layouts]
 				end
 			end
 		end
-		context "valid update", :focus => true do
+		context "valid update" do
 			it "should return true" do
 				list = @module_list.keys
 				list.each do |mod|

@@ -44,6 +44,105 @@ class ZCRMModule
 
 	end
 
+	def construct_search_params(word, email, phone, criteria)
+		params = {}
+		if !word.nil? && !word.empty? then
+			params["word"] = word
+		end
+		if !email.nil? && !email.empty? then
+			params["email"] = email
+		end
+		if !phone.nil? && !phone.empty? then
+			params["phone"] = phone
+		end
+		if !criteria.nil? && !criteria.empty? then
+			params["criteria"] = criteria
+		end
+		return params
+	end
+
+	def get_deleted_records(type="all")
+		accepted_types = ["all", "recycle", "permanent"]
+		if type.nil? || type.empty? then
+			return false, nil
+		end
+		if !accepted_types.include?(type) then
+			ZohoCRMClient.debug_log("Please check the given type. Possible values for type are : #{accepted_types}")
+			return false, nil
+		end
+		url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "deleted"
+		ZohoCRMClient.debug_log("URL ==> #{url_str} ")
+		params = {}
+		params["type"] = type
+		headers = @zclient.construct_headers
+		response = @zclient.safe_get(url_str, params, headers)
+		if !response.nil? then
+			code = response.code.to_i
+			if code == 200 then
+				body = response.body
+				list = Api_Methods._get_list(body, "data")
+				result = {}
+				list.each do |json|
+					id = json["id"]
+					result[id] = json
+				end
+				return true, result
+			elsif code == 204
+				ZohoCRMClient.debug_log("No records found ==> ")
+				return true, {}
+			else
+				ZohoCRMClient.debug_log("Improper status code ==> #{code}")
+				return false, nil
+			end
+		else
+			return false, nil
+		end
+	end
+
+	def search_records(word=nil, email=nil, phone=nil, criteria=nil)
+		if !self.is_search_supported then
+			ZohoCRMClient.debug_log("Search is not supported for this module. Please check again.")
+			return false, nil
+		end
+		#https://www.zohoapis.com/crm/v2/{Module}/search
+		url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "search"
+		ZohoCRMClient.debug_log("URL ==> #{url_str}")
+		params = self.construct_search_params(word, email, phone, criteria)
+		if params.empty? then
+			ZohoCRMClient.debug_log("Invalid params ")
+			return false, nil
+		end
+		headers = @zclient.construct_headers
+		response = @zclient.safe_get(url_str, params, headers)
+		code = response.code.to_i
+		if code == 200 then
+			result = {}
+			ZohoCRMClient.debug_log("Request is a success with code 200 ")
+			body = response.body
+			list = Api_Methods._get_list(body, "data")
+			list.each do |json|
+				record = ZCRMRecord.new(self.module_name, json, @fields, self)
+				r_id = record.record_id 
+				result[r_id] = record
+			end
+			return true, result
+		elsif code == 204
+			ZohoCRMClient.debug_log("No records matched this search ")
+			return true, {}
+		else
+			ZohoCRMClient.debug_log("Improper status code ===> #{code}")
+			return false, nil
+		end
+
+	end
+
+	def get_related_modules
+		if @related_lists.nil? then
+			populate_related_lists(@hash_values)
+		end
+		return @related_lists.keys
+	end
+
 	def populate_related_lists(json_hash)
 		if !json_hash.has_key?("related_lists") then
 			return
@@ -51,15 +150,23 @@ class ZCRMModule
 		rls = json_hash["related_lists"]
 		if rls.length > 0 then
 			rls.each do |rl|
+				rl_obj = RelatedList.new(rl, self)
+				apiname = rl_obj.api_name
+				@related_lists[apiname] = rl_obj
+			end
+=begin
+			rls.each do |rl|
 				rl = rls[0]
 				rl_obj = RelatedList.new(rl, self)
 				apiname = rl_obj.api_name
 				@related_lists[apiname] = rl_obj
 			end
+=end
 		end
-		if !@related_lists.empty then
-			ZohoCRMClient.debug_log("Related list have been populated, printing them here for debugging \n
-				#{@related_lists}")
+		if !@related_lists.empty? then
+			#ZohoCRMClient.debug_log("Related list have been populated, printing them here for debugging \n #{@related_lists}")
+			ZohoCRMClient.debug_log("Related list have been populated, printing them here for debugging, \n 
+				related list size ==> #{@related_lists.size}, related lists modules ==> #{@related_lists.keys} ")
 		else
 			ZohoCRMClient.debug_log("There are no related lists: ==> #{@related_lists}")
 		end
@@ -112,6 +219,10 @@ class ZCRMModule
 
 		ZohoCRMClient.debug_log("Default layout id ===> #{layout.id} ")
 		return layout.req_field_ids
+	end
+
+	def is_search_supported
+		return @hash_values["global_search_supported"]
 	end
 
 	def is_creatable
@@ -178,21 +289,39 @@ class ZCRMModule
 		i = 0
 		new_records = []
 		req_fields = self.get_required_fields
-		fields = self.get_fields
-		while i < num do
+		all_fields = self.get_fields
+
+		while i <  num do
 			new_record = self.get_new_record
-			fields.each do |id, field_obj|
-				if req_fields.include? id || field_obj.is_required then
-					field_name = field_obj.field_name
-					value = ZCRMField.get_test_data(field_obj, @apiObj)
-					new_record.set(field_name, value)
+			req_fields.each do |f_id|
+				f_obj = all_fields[f_id]
+				f_name = f_obj.field_name
+				datatype = f_obj.data_type
+				value = nil
+				if f_name != "Layout" then
+					value = ZCRMField.get_test_data(f_obj, @apiObj)
+				else
+					value = new_record.layout_id
+				end
+				if datatype != "ownerlookup" then
+					bool, message = new_record.set(f_obj, value)
+					if !bool then
+						ZohoCRMClient.debug_log("Field_name, field_id, datatype ==> #{f_name}, #{f_obj.field_id} , #{datatype} \n 
+									Message ==> #{message}")
+					end
+				else
+					bool, message = new_record.set_owner(f_obj, field_name)
+					if !bool then
+						ZohoCRMClient.debug_log("Problem occurred while setting owner, Error message ==> #{message}")
+					end
 				end
 			end
 			new_records[new_records.length] = new_record
-			i = i+1
+			i = i + 1
 		end
+
 		bool, message, ids = upsert(new_records)
-		return records.keys
+		return ids
 	end
 
 	def get_zclient
@@ -200,10 +329,16 @@ class ZCRMModule
 	end
 
 	def load_crm_module(module_name)
-		return Api_Methods.load_crm_module(module_name, meta_folder)
+		if module_name.nil? then
+			ZohoCRMClient.debug_log("Module name nil for load crm module => ")
+		end
+		if @meta_folder.nil? then
+			ZohoCRMClient.debug_log("Meta folder is nil for load crm module => ")
+		end
+		return Meta_data.load_crm_module(module_name, @meta_folder)
 	end
 
-	def get_related_records(rel_api_name, id)
+	def get_related_records(rel_api_name, id) #todo: may not be needed
 		#typing finish this also
 		record = self.get_new_record
 		record.set_record_id(id)
@@ -807,6 +942,9 @@ class RelatedList
 			@is_module = true
 		end
 		@parent_module_obj = parent_module_obj
+	end
+	def module
+		return @module
 	end
 	def api_name
 		return @api_name
