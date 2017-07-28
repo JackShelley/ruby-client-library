@@ -13,7 +13,6 @@ class Meta_data
 
 	def self.module_data(zclient, module_name, meta_folder)
 		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
-		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules/{module_name}"
 		if zclient.nil? then
 			return false
@@ -24,7 +23,8 @@ class Meta_data
 		begin
 			headers = zclient.construct_headers
 			module_url_path = "settings/modules/"
-			module_url = Constants::DEF_CRMAPI_URL + module_url_path + module_name
+			#module_url = Constants::DEF_CRMAPI_URL + module_url_path + module_name
+			module_url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + module_url_path + module_name
 			response = zclient.safe_get(module_url, {}, headers)
 			if response.nil? then
 				ZohoCRMClient.debug_log("Response is nil for module ===> #{module_name}")
@@ -73,9 +73,9 @@ class Meta_data
 			Meta_data::dump_yaml(mod_obj, path+file_name)
 			res = true
 		rescue Exception => e
-			#ZohoCRMClient.handle_exception(e, "Exception occurred while fetching whole module data for ======> "+module_name)
-			ZohoCRMClient.debug_log("Exception occurred while fetchin whole module data for ====> #{module_name}")
-			raise e
+			ZohoCRMClient.debug_log("Exception occurred while fetching module data for ==> #{module_name}")
+			ZohoCRMClient.debug_log(e.messsage)
+			ZohoCRMClient.debug_log(e.backtrace.inspect)
 			res = false
 		end
 		return res
@@ -89,12 +89,6 @@ class Meta_data
 		if module_name.empty? || meta_folder.empty? then
 			return nil
 		end
-=begin
-		if !File.exists?(file_name) then
-			ZohoCRMClient.debug_log("The file did not exist for module ===> #{module_name}, in the folder ===> #{meta_folder}")
-			return nil
-		end
-=end
 		file = meta_folder + file_name
 		result_obj = Meta_data.load_yaml(file)
 		return result_obj
@@ -107,10 +101,10 @@ class Meta_data
 
 	def self.get_module_list(zclient, api_supported = true)
 		# Actual url: https://www.zohoapis.com/crm/v2/settings/modules
-		# DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		res = {}
 		url_path = "settings/modules"
-		url = Constants::DEF_CRMAPI_URL + url_path
+		#url = Constants::DEF_CRMAPI_URL + url_path
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + url_path
 		headers = zclient.construct_headers
 		response = zclient._get(url, {}, headers)
 		body = response.body 
@@ -149,12 +143,13 @@ class Meta_data
 
 	def self.user_data(zclient, refresh = true, meta_folder="/Users/kamalkumar/Desktop/")
 		## user_id, user_name, user_email, created_time (invitation_accepted_time)
-		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/users"
+		res = false
 		begin
 			headers = zclient.construct_headers
 			path = "users"
-			url = Constants::DEF_CRMAPI_URL + path
+			#url = Constants::DEF_CRMAPI_URL + path
+			url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + path
 			response = zclient._get(url, {}, headers)
 			body = response.body
 			json_list = Api_Methods._get_list(body, "users")
@@ -173,7 +168,7 @@ class Meta_data
 				res = false
 				puts e.message
 				puts e.backtrace.inspect
-				ZohoCRMClient.panic "Error occurred while dumping module meta_data "+path+file_name
+				ZohoCRMClient.debug_log "Error occurred while dumping module meta_data "+path+file_name
 			end
 
 		rescue Exception => e
@@ -182,9 +177,11 @@ class Meta_data
 			puts e.backtrace.inspect
 			ZohoCRMClient.panic "Error in collecting users_data method ::: "
 		end
+		return res
 	end
 
 	def self.load_user_data(meta_folder="/Users/kamalkumar/Desktop/")
+		res = nil
 		begin
 			file = meta_folder + @@user_metadata_filename
 			if File.exists?(file) then
@@ -194,19 +191,20 @@ class Meta_data
 				return nil
 			end
 		rescue
-			ZohoCRMClient.panic "Error occurred loading module_data from its meta_data file ::: Please check the files "
+			ZohoCRMClient.debug_log "Error occurred loading module_data from its meta_data file ::: Please check the files "
 		end
 		return res
 	end
 
 	def self.org_data(zclient, refresh = true, meta_folder="/Users/kamalkumar/Desktop/")
 		## org_name, zgid
-		#DEF_CRMAPI_URL = "https://www.zohoapis.com/crm/v2/"
 		#Actual = "https://www.zohoapis.com/crm/v2/org"
+		res = false
 		begin
 			headers = zclient.construct_headers
 			path = "org"
-			url = Constants::DEF_CRMAPI_URL + path
+			#url = Constants::DEF_CRMAPI_URL + path
+			url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + path
 			response = zclient._get(url, {}, headers)
 			body = response.body
 			json_list = Api_Methods._get_list(body, "org")
@@ -225,18 +223,20 @@ class Meta_data
 				res = false
 				puts e.message
 				puts e.backtrace.inspect
-				ZohoCRMClient.panic "Error occurred while dumping org meta_data "+path+file_name
+				ZohoCRMClient.debug_log "Error occurred while dumping org meta_data "+path+file_name
 			end
 
 		rescue Exception => e
 			res = false
 			puts e.message
 			puts e.backtrace.inspect
-			ZohoCRMClient.panic "Error in collecting org_data method ::: "
+			ZohoCRMClient.debug_log "Error in collecting org_data method ::: "
 		end
+		return res
 	end
 
 	def self.load_org_data(meta_folder="/Users/kamalkumar/Desktop/")
+		res = nil
 		begin
 			file = meta_folder + @@org_metadata_filename
 			if File.exists?(file) then
@@ -248,7 +248,7 @@ class Meta_data
 		rescue Exception => e
 			puts e.message
 			puts e.backtrace.inspect
-			ZohoCRMClient.panic "Error occurred loading module_data from its meta_data file ::: Please check the files "
+			ZohoCRMClient.debug_log "Error occurred loading module_data from its meta_data file ::: Please check the files "
 		end
 		return res
 	end
@@ -259,27 +259,6 @@ class Meta_data
 		user_res = user_data(zclient, refresh, meta_folder)
 		org_res = org_data(zclient, refresh, meta_folder)
 	end
-=begin TODO: Remove comment
-		if mod_res then
-			puts "pulling module_data was successful ::: " << "\n"
-		else
-			puts "Problem while getting module data" << "\n"
-			puts "Fetching data failed for the following modules :: " << "\n"
-			puts failed_modules
-		end
-
-		if user_res then
-			puts "pulling module_data was successful ::: " << "\n"
-		else
-			puts "Problem while getting module data" << "\n"
-		end
-
-		if org_res then
-			puts "pulling module_data was successful ::: " << "\n"
-		else
-			puts "Problem while getting module data" << "\n"
-		end
-=end
 
 	# YAML functions ::: For Serializing and De-Serializing objects 
 	# they both Throw File opening related exceptions

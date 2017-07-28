@@ -92,8 +92,10 @@ class ZCRMRecord
 			ZohoCRMClient.debug_log("Record id is not set ::: ")
 			return false,{}
 		end
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
+
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
 		headers = zclient.construct_headers
 		params = {}
 		response = zclient.safe_get(url, params, headers)
@@ -135,9 +137,10 @@ class ZCRMRecord
 			return false, nil
 		end
 
-		url_str = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
-		ZohoCRMClient.debug_log("the url ==> #{url_str}")
+		#url_str = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
 		zclient = @module_obj.get_zclient
+		url_str = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Attachments"
+		ZohoCRMClient.debug_log("the url ==> #{url_str}")
 		headers = zclient.construct_headers
 		params = {}
 
@@ -222,10 +225,13 @@ class ZCRMRecord
 			ZohoCRMClient.debug_log("Record id is nil. Please check and proceed")
 			return false, nil
 		end
-		url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
+		#url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
+		#Constants::URL_PATH_SEPERATOR + "Attachments" + Constants::URL_PATH_SEPERATOR + attachment_id
+		
+		zclient = @module_obj.get_zclient
+		url_str = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + 
 		Constants::URL_PATH_SEPERATOR + "Attachments" + Constants::URL_PATH_SEPERATOR + attachment_id
 		ZohoCRMClient.debug_log("URL ==> #{url_str}")
-		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		response = zclient.safe_get(url_str, {}, headers)
 		if !response.nil? && response.class == RestClient::Response then
@@ -270,7 +276,9 @@ class ZCRMRecord
 			return false
 		end
 
-		url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		#url_str = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		zclient = @module_obj.get_zclient
+		url_str = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
 		url = URI.parse(url_str)
 		begin
 			img_file = File.open(image_path)
@@ -280,7 +288,7 @@ class ZCRMRecord
 			return false
 		end
 		file_name = ZCRMRecord.get_file_name(image_path)
-		zclient = @module_obj.get_zclient
+		
 		headers = zclient.construct_headers
 
 		http = Net::HTTP.new(url.host, url.port)
@@ -341,8 +349,10 @@ class ZCRMRecord
 			ZohoCRMClient.debug_log("Download and upload photo is supported only for Leads and Contact modules")
 			return false
 		end
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
+
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "photo"
 		headers = zclient.construct_headers
 		response = zclient.safe_get(url, {}, headers)
 		if response.nil? then
@@ -382,9 +392,11 @@ class ZCRMRecord
 			return false, {}
 		end
 		return_hash = {}
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Notes"
-		ZohoCRMClient.debug_log("URL ==> #{url}")
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		ZohoCRMClient.debug_log("URL ==> #{url}")
 		headers = zclient.construct_headers
 		params = {}
 		response = zclient.safe_get(url, params, headers)
@@ -439,20 +451,20 @@ class ZCRMRecord
 		final_hash = {}
 		final_hash['data'] = arr
 		json = JSON::generate(final_hash)
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + 'Notes' 
-		ZohoCRMClient.debug_log("The URL ==> #{url}")
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + 'Notes' 
+		
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + self.record_id + Constants::URL_PATH_SEPERATOR + 'Notes' 
+		ZohoCRMClient.debug_log("The URL ==> #{url}")
 		headers = zclient.construct_headers
 		params = {}
 		ZohoCRMClient.debug_log("JSON for create note ==> #{json}")
 		begin
 			response = zclient.safe_upsert_post(url, params, headers, json)
 		rescue => e
-			if e.class == BadRequestException then
-				ZohoCRMClient.debug_log("My guess was right => ")
-			end
 			return false, nil
 		end
+		zclient.update_limits_HTTPRESPONSE(response)
 		code = response.code.to_i
 		if code > 204 then
 			ZohoCRMClient.debug_log("Invalid status code while creating note ==> #{code}")
@@ -509,15 +521,18 @@ class ZCRMRecord
 		end
 		final_hash["data"] = arr
 		final_json = JSON.generate(final_hash)
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + "Notes"
-		ZohoCRMClient.debug_log("URL ==> #{url}")
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + "Notes"
+		ZohoCRMClient.debug_log("URL ==> #{url}")
 		headers = zclient.construct_headers
 		ZohoCRMClient.debug_log("Final json ==> #{final_json}")
 		response = zclient.safe_update_put(url, headers, final_json)
 		if response.nil? then
 			return false
 		end
+		zclient.update_limits_HTTPRESPONSE(response)
 		code = response.code.to_i
 		if code > 204 then
 			ZohoCRMClient.debug_log("update_put returned with improper code ==> #{code}")
@@ -609,9 +624,11 @@ class ZCRMRecord
 			return false, {}
 		end
 
-		url = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_obj.api_name
-		ZohoCRMClient.debug_log("URL ==> #{url}")
+		#url = Constants::DEF_CRMAPI_URL + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_obj.api_name
+		
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_obj.module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_obj.api_name
+		ZohoCRMClient.debug_log("URL ==> #{url}")
 		headers = zclient.construct_headers
 		params = {}
 		response = zclient.safe_get(url, params, headers)
@@ -667,8 +684,9 @@ class ZCRMRecord
 
 		#related_record_id = related_record_obj.record_id
 		record_id = self.record_id
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
+		#url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
 		headers = zclient.construct_headers
 		params = {}
 		json = related_record_obj.construct_update_hash
@@ -721,8 +739,9 @@ class ZCRMRecord
 
 		related_record_id = related_record_obj.record_id
 		record_id = self.record_id
-		url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
+		#url = Constants::DEF_CRMAPI_URL + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + URL_PATH_SEPERATOR + self.record_id + URL_PATH_SEPERATOR + related_module + URL_PATH_SEPERATOR + related_record_id
 		headers = zclient.construct_headers
 		params = {}
 		json = related_record_obj.construct_update_hash
@@ -776,8 +795,9 @@ class ZCRMRecord
 		if related_record_obj.nil? then
 			return false
 		end
-		url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_api_name + Constants::URL_PATH_SEPERATOR + rel_id
+		#url = Constants::DEF_CRMAPI_URL + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_api_name + Constants::URL_PATH_SEPERATOR + rel_id
 		zclient = @module_obj.get_zclient
+		url = Constants::ZOHOAPIS_URL + zclient.get_domain + Constants::V2_PATH + @module_name + Constants::URL_PATH_SEPERATOR + @record_id + Constants::URL_PATH_SEPERATOR + rel_api_name + Constants::URL_PATH_SEPERATOR + rel_id
 		headers = zclient.construct_headers
 		params = {}
 		response = zclient.safe_delete(url, params, headers)

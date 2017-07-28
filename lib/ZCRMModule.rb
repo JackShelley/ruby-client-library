@@ -70,7 +70,8 @@ class ZCRMModule
 			ZohoCRMClient.debug_log("Please check the given type. Possible values for type are : #{accepted_types}")
 			return false, nil
 		end
-		url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "deleted"
+		#url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "deleted"
+		url_str = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name + Constants::URL_PATH_SEPERATOR + "deleted"
 		ZohoCRMClient.debug_log("URL ==> #{url_str} ")
 		params = {}
 		params["type"] = type
@@ -104,8 +105,8 @@ class ZCRMModule
 			ZohoCRMClient.debug_log("Search is not supported for this module. Please check again.")
 			return false, nil
 		end
-		#https://www.zohoapis.com/crm/v2/{Module}/search
-		url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "search"
+		#url_str = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + "search"
+		url_str = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name + Constants::URL_PATH_SEPERATOR + "search"
 		ZohoCRMClient.debug_log("URL ==> #{url_str}")
 		params = self.construct_search_params(word, email, phone, criteria)
 		if params.empty? then
@@ -590,7 +591,9 @@ class ZCRMModule
 		end
 
 		records = {}
-		url = Constants::DEF_CRMAPI_URL + self.module_name
+		#url = Constants::DEF_CRMAPI_URL + self.module_name
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name
+
 		params = construct_GET_params(sort_order_fv, per_page_fv, approved_fv, converted_fv, fields_fv, page_fv)
 		#ZohoCRMClient.debug_log("fields passed ===> #{fields_fv.join(",")}")
 		#ZohoCRMClient.debug_log("The params passed ===> #{params}")
@@ -631,7 +634,8 @@ class ZCRMModule
 		if records.empty? then
 			return false, "No Record to update"
 		end
-		url = Constants::DEF_CRMAPI_URL + self.module_name
+		#url = Constants::DEF_CRMAPI_URL + self.module_name
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name
 
 		headers = @zclient.construct_headers
 		temp = []
@@ -650,8 +654,11 @@ class ZCRMModule
 		ZohoCRMClient.debug_log("Update json ===> #{update_json}")
 		response = @zclient.safe_update_put(url, headers, update_json)
 		if response.nil? then
-			ZohoCRMClient.debug_log
+			return false, "Error response for update_records api call"
 		end
+		ZohoCRMClient.debug_log("Response class => #{response.class}")
+		ZohoCRMClient.debug_log("Response headers => #{response.header}")
+		@zclient.update_limits_HTTPRESPONSE(response)
 		#response = @zclient._update_put(url, headers, update_json)
 		body = response.body
 		ZohoCRMClient.debug_log("In update records ==> ")
@@ -683,7 +690,8 @@ class ZCRMModule
 		if records.nil? || records.empty? then
 			return false, Constants::EMPTY_RECORDS_MSG, []
 		end
-		url = Constants::DEF_CRMAPI_URL + self.module_name
+		#url = Constants::DEF_CRMAPI_URL + self.module_name
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name
 		failed_records = []
 		jsons = []
 		records.each do |record|
@@ -731,6 +739,7 @@ class ZCRMModule
 		if code == 401 then
 			raise InvalidTokensError
 		end
+		@zclient.update_limits_HTTPRESPONSE(response)
 		body = response.body
 		print "Printing body ","\n"
 		print body, "\n"
@@ -765,7 +774,8 @@ class ZCRMModule
 			return false
 		end
 		ZohoCRMClient.debug_log("ids passed are ===> #{ids}")
-		url = Constants::DEF_CRMAPI_URL + self.module_name
+		#url = Constants::DEF_CRMAPI_URL + self.module_name
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name
 		print "Url ===> ", url, "\n"
 		number_of_ids = ids.length
 		cntr = 1
@@ -811,7 +821,8 @@ class ZCRMModule
 			return nil
 		end
 		#https://www.zohoapis.com/crm/api/v2/{Module}/{Id}
-		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		#url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name + Constants::URL_PATH_SEPERATOR + id
 		ZohoCRMClient.debug_log("URL ===> #{url}")
 		headers = @zclient.construct_headers
 		response = @zclient.safe_get(url, {}, headers)
@@ -873,10 +884,18 @@ class ZCRMModule
 		final_hash["data"] = arr
 		payload = JSON.generate(final_hash)
 		ZohoCRMClient.debug_log("final payload ===> #{payload}")
-		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		#url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name + Constants::URL_PATH_SEPERATOR + id
 		ZohoCRMClient.debug_log("URL ==> #{url}")
 		headers = @zclient.construct_headers
 		response = @zclient.safe_update_put(url, headers, payload)
+		if response.nil? then
+			return false, nil
+		end
+		ZohoCRMClient.debug_log("Response class => #{response.class} ")
+		ZohoCRMClient.debug_log("Headers => #{response.to_hash.inspect}")
+		ZohoCRMClient.debug_log("Headers => #{response.to_hash.class}")
+		@zclient.update_limits_HTTPRESPONSE(response)
 		body = response.body
 		ZohoCRMClient.debug_log("Update record response ==> #{body}")
 		temp = Api_Methods._get_list(body, "data")
@@ -897,8 +916,8 @@ class ZCRMModule
 		if !self.is_deletable then
 			return false
 		end
-		#https://www.zohoapis.com/crm/v2/{Module}/{EntityID}
-		url = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + module_name + Constants::URL_PATH_SEPERATOR + record_id
+		#url = Constants::DEF_CRMAPI_URL + self.module_name + Constants::URL_PATH_SEPERATOR + record_id
+		url = Constants::ZOHOAPIS_URL + @zclient.get_domain + Constants::V2_PATH + self.module_name + Constants::URL_PATH_SEPERATOR + record_id
 		headers = @zclient.construct_headers
 		response = @zclient.safe_delete(url, {}, headers)
 		body = response.body

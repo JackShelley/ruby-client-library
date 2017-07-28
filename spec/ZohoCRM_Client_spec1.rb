@@ -10,10 +10,12 @@ RSpec.describe ZohoCRMClient do
 		expect(ZohoCRMClient::VERSION).not_to be nil
 	end
 	before do
-		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.f00340154a3bf245e0dbd817e091f9da.42d1d9d42d1b06b513cb3e6fdc7b5365", "1000.5d80912adfcf5f10f6bd562d2adc62ec.4cd65eca6d89324a5b7e4e3818096fae", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		#@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.f00340154a3bf245e0dbd817e091f9da.42d1d9d42d1b06b513cb3e6fdc7b5365", "1000.5d80912adfcf5f10f6bd562d2adc62ec.4cd65eca6d89324a5b7e4e3818096fae", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		#last updated refresh token @zclient July 7 Friday
 		@default_meta_folder = "/Users/kamalkumar/spec_meta_folder/"
-		@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
+		@conf_file = "/Users/kamalkumar/conf/config.yaml"
+		@zclient, @apiObj = ZohoCRMClient.get_client_objects(@conf_file)
+		#@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
 		@headers = @zclient.construct_headers
 		@invalid_url = "something.com"
 		@lObj = @apiObj.load_crm_module("Leads")

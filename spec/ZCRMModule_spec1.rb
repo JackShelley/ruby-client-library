@@ -10,10 +10,12 @@ RSpec.describe ZCRMModule do
 	end
 
 	before do
-		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		#@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@default_meta_folder = "/Users/kamalkumar/spec_meta_folder/"
-		@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
-		@improper_zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.07575fda88b3dbd73ff279a9af75aa06.c2b0c2add3a09be9a6asdvsdebe56ae6bb8", "1000.7461b182dfddc8e94bf1ec3d9d770fdb.73dc7bb4aedsvsdvsd445a089d0a6c196fa7101", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		#@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
+		@conf_file = "/Users/kamalkumar/conf/config.yaml"
+		@zclient, @apiObj = ZohoCRMClient.get_client_objects(@conf_file)
+		#@improper_zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.07575fda88b3dbd73ff279a9af75aa06.c2b0c2add3a09be9a6asdvsdebe56ae6bb8", "1000.7461b182dfddc8e94bf1ec3d9d770fdb.73dc7bb4aedsvsdvsd445a089d0a6c196fa7101", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@lObj = @apiObj.load_crm_module("Leads")
 		@leads_hv = @lObj.get_hash_values
 		@invalid_folder = "/this/folder/does/not/exist"
@@ -22,8 +24,10 @@ RSpec.describe ZCRMModule do
 		#save_modulelist_from_db(@module_list, @module_list_file)
 		@leads_fields = @lObj.get_fields
 		@modules_map = load_modulelist_from_db(@module_list_file)
+		@modules_map.delete("Activities")
 		@module_list = load_modulelist_from_db(@module_list_file)
-		@x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Approvals", "Deals", "NewModules"] #, "Travels"]
+		@module_list.delete("Activities")
+		@x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Approvals", "Deals", "NewModules", "Travels"]
 		@x_data_type = ["autonumber"]
 		@all_field_x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Potentials", "Deals", "Approvals", "Entermodules"]
 		@search_mods = []
@@ -102,6 +106,9 @@ layouts - jsonArray [array of layouts]
 			it "should return false" do
 				list = @module_list.keys
 				list.each do |mod|
+					if mod == "Activities" then
+						next
+					end
 					mod_obj = @apiObj.load_crm_module(mod)
 					bool, result = mod_obj.get_deleted_records(nil)
 					expect(bool).to eq false
@@ -119,6 +126,9 @@ layouts - jsonArray [array of layouts]
 			it "returns true and a hash, type in every returned json should be recycle " do
 				list = @module_list.keys
 				list.each do |mod|
+					if mod == "Activities" then
+						next
+					end
 					mod_obj = @apiObj.load_crm_module(mod)
 					bool, result = mod_obj.get_deleted_records("recycle")
 					expect(bool).to eq true
@@ -138,6 +148,9 @@ layouts - jsonArray [array of layouts]
 			it "return true and a hash, type in every returned json should be permanent" do
 				list = @module_list.keys
 				list.each do |mod|
+					if mod == "Activities" then
+						next
+					end
 					mod_obj = @apiObj.load_crm_module(mod)
 					bool, result = mod_obj.get_deleted_records("permanent")
 					expect(bool).to eq true
@@ -161,6 +174,9 @@ layouts - jsonArray [array of layouts]
 				list = @module_list.keys
 				list.each do |mod|
 					if !@non_search_mods.include?(mod) then
+						next
+					end
+					if mod == "Activities" then
 						next
 					end
 					mod_obj = @apiObj.load_crm_module(mod)
@@ -808,58 +824,6 @@ layouts - jsonArray [array of layouts]
 					expect(r_f_ids).not_to be_nil
 					r_s_ids =~ s_ids
 					r_f_ids =~ f_ids
-				end
-			end
-		end
-		context "all fields are being updated, for all the modules" do
-			it "should return all the ids in success_ids and none in failure_ids" do
-				#Anamolies - Deals - "Type" field name, gets set if we set another 
-				list = @module_list.keys
-				list.each do |mod|
-					if @all_field_x_mod_list.include? mod then
-						next
-					end
-					ZohoCRMClient.debug_log("Trying for module ===> #{mod}")
-					mod_obj = @apiObj.load_crm_module(mod)
-					#rand_per_page = 1 + rand(200)
-					rand_per_page = 10
-					records = mod_obj.get_records(rand_per_page)
-					record_ids = records.keys
-					all_fields = mod_obj.get_fields
-					records.each do |r_id, record|
-						all_fields.each do |f_id, f_obj|
-							f_name = f_obj.field_name
-							datatype = f_obj.data_type
-							if @x_data_type.include?(datatype) then
-								next
-							end
-							if f_name != "Layout" then
-								value = ZCRMField.get_test_data(f_obj, @apiObj)
-							else
-								value = record.layout_id
-							end
-							if datatype != "ownerlookup" then
-								bool, message = record.set(f_obj, value)
-								if !bool then
-									ZohoCRMClient.debug_log("Field_name, datatype, value ===> #{f_name}, #{datatype}, #{value}")
-									ZohoCRMClient.debug_log("Error Message ===> #{message}")
-									next
-								end
-								expect(bool).to eq true
-							else
-								temp, message = record.set_owner(value, @apiObj.load_user_data)
-								if !temp then
-									ZohoCRMClient.debug_log("Error setting owner id to ===> #{value}")
-									ZohoCRMClient.debug_log("Error message ===> #{message}")
-								end
-								expect(temp).to eq true
-							end
-						end
-					end
-					s_ids, f_ids = mod_obj.update_records(records)
-					#Assertions
-					#s_ids.should =~ record_ids
-					expect(f_ids).to be_empty
 				end
 			end
 		end

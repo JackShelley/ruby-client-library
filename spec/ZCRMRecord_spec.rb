@@ -9,10 +9,12 @@ RSpec.describe ZCRMRecord do
 		Meta_data::dump_yaml(obj, fp)
 	end
 	before do
-		@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		#@zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.4749c84f5218c90b92cb0795cd6d4aae.a4d2228eb017a7bfc265a0556a933f62", "1000.d25898a302dd992fba6521d678d429db.0a25fd3af864dc8b8549f854c65482e0", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@default_meta_folder = "/Users/kamalkumar/spec_meta_folder/"
-		@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
-		@improper_zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.07575fda88b3dbd73ff279a9af75aa06.c2b0c2add3a09be9a6asdvsdebe56ae6bb8", "1000.7461b182dfddc8e94bf1ec3d9d770fdb.73dc7bb4aedsvsdvsd445a089d0a6c196fa7101", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
+		@conf_file = "/Users/kamalkumar/conf/config.yaml"
+		@zclient, @apiObj = ZohoCRMClient.get_client_objects(@conf_file)
+		#@apiObj = Api_Methods.new(@zclient, @default_meta_folder)
+		#@improper_zclient = ZohoCRMClient.new("1000.UZ62A7H7Z1PX25610YHMBNIFP7BJ17", "defd547a919eecebeed00ce0c2a5a4a2f24c431cc6", "1000.07575fda88b3dbd73ff279a9af75aa06.c2b0c2add3a09be9a6asdvsdebe56ae6bb8", "1000.7461b182dfddc8e94bf1ec3d9d770fdb.73dc7bb4aedsvsdvsd445a089d0a6c196fa7101", "http://ec2-52-89-68-27.us-west-2.compute.amazonaws.com:8080/V2APITesting/Action")
 		@lObj = @apiObj.load_crm_module("Leads")
 		@leads_hv = @lObj.get_hash_values
 		@invalid_folder = "/this/folder/does/not/exist"
@@ -21,7 +23,9 @@ RSpec.describe ZCRMRecord do
 		#save_modulelist_from_db(@module_list, @module_list_file)
 		@leads_fields = @lObj.get_fields
 		@modules_map = load_modulelist_from_db(@module_list_file)
+		@modules_map.delete("Activities")
 		@module_list = load_modulelist_from_db(@module_list_file)
+		@module_list.delete("Activities")
 		@image_file = "/Users/kamalkumar/Downloads/osho001.jpg"
 		@x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Approvals"] #, "Travels"]
 		@x_data_type = ["autonumber"]
@@ -341,6 +345,9 @@ RSpec.describe ZCRMRecord do
 				list = @module_list.keys 
 				list.each do |mod|
 					if @attachment_x_list.include?(mod) then
+						next
+					end
+					if @x_mod_list.include?(mod) then
 						next
 					end
 					mod_obj = @apiObj.load_crm_module(mod)
@@ -743,6 +750,9 @@ RSpec.describe ZCRMRecord do
 					if @notes_x_list.include?(mod) then
 						next
 					end
+					if @x_mod_list.include?(mod) then
+						next
+					end
 					if mod == "Leads" || mod == "Contacts" then
 						next
 					end
@@ -812,6 +822,9 @@ RSpec.describe ZCRMRecord do
 				list = @module_list.keys
 				list.each do |mod|
 					if @notes_x_list.include? (mod) then
+						next
+					end
+					if @x_mod_list.include? (mod) then
 						next
 					end
 					mod_obj = @apiObj.load_crm_module(mod)

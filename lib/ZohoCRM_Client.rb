@@ -26,7 +26,38 @@ class ZohoCRMClient
 		print "\n"
 	end
 
-	def initialize(client_id="", client_secret="", refresh_token="", access_token="", redirect_uri="")
+	def self.get_client_objects(file_path)
+		if !File.exists?(file_path) then
+			return nil, nil
+		end
+		accepted_domains = ["com", "eu", "cn"]
+		conf_obj = Meta_data.load_yaml(file_path)
+		client_id = conf_obj['client_id']
+		client_secret = conf_obj['client_secret']
+		redirect_uri = conf_obj['redirect_uri']
+		refresh_token = conf_obj['refresh_token']
+		access_token = conf_obj['access_token']
+		domain = conf_obj['domain']
+		if !accepted_domains.include?(domain) then
+			return nil, nil
+		end
+		has_log_file = conf_obj['has_log_file']
+		log_file = conf_obj['log_file']
+		if has_log_file then
+			if !File.exists?(log_file) then
+				has_log_file = false
+			end
+		end
+		zclient = ZohoCRMClient.new(client_id, client_secret, refresh_token, access_token, redirect_uri, domain, has_log_file, log_file)
+		meta_folder = conf_obj['meta_folder']
+		apiObj = nil
+		if File.exists?(meta_folder) then
+			apiObj = Api_Methods.new(zclient, meta_folder)
+		end
+		return zclient, apiObj
+	end
+
+	def initialize(client_id="", client_secret="", refresh_token="", access_token="", redirect_uri="", domain="", has_log_file=false, log_file="")
 		@client_app = ClientAppDetails.new(client_id, client_secret, redirect_uri)
 		if refresh_token.empty? then
 			refresh_token = Constants::TOBEGENERATED
@@ -36,6 +67,14 @@ class ZohoCRMClient
 		end
 		@tokens = Tokens.new(refresh_token, access_token)
 		@api_limits = nil
+		@domain = domain
+		@has_log_file = has_log_file
+		@log_file = log_file
+
+	end
+
+	def get_domain
+		return @domain
 	end
 
 	def get_api_limits
@@ -566,7 +605,8 @@ class ZohoCRMClient
 		#ZohoCRMClient.debug_log("Revoke_called :: from :: #{[caller[0],caller[1]]}")
 		res = false
 		revoketoken_path = "oauth/v2/token"
-		url = Constants::DEF_ACCOUNTS_URL + revoketoken_path
+		#url = Constants::DEF_ACCOUNTS_URL + revoketoken_path
+		url = Constants::ACCOUNTS_URL + @domain +  Constants::URL_PATH_SEPERATOR + revoketoken_path
 		params = {}
 		params[:client_id] = @client_app.client_id
 		params[:client_secret] = @client_app.client_secret
@@ -691,6 +731,27 @@ class APILimits
 
 	def update_api_limits(response)
 		headers = response.headers
+		if !headers.has_key?(:x_ratelimit_day_remaining) then
+			return
+		end
+		if headers[:x_ratelimit_day_remaining].nil? then
+			ZohoCRMClient.debug_log("response headers are not proper ==> #{headers}")
+			ZohoCRMClient.debug_log("Printing the response ==> #{response}")
+		else
+			temp = headers[:x_ratelimit_day_remaining]
+			@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
+		end
+		ZohoCRMClient.debug_log("Inside update_api_limits x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
+		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
+		@x_ratelimit = headers[:x_ratelimit_limit]#.to_i
+		@x_ratelimit_remaining = headers[:x_ratelimit_remaining]#.to_i
+		@x_ratelimit_reset = headers[:x_ratelimit_reset]#.to_i
+		@lastupdtime = Time.now.to_i
+		ZohoCRMClient.debug_log("Inside update_api_limits ===> #{self}")
+	end
+
+	def update_api_limits1(response)
+		headers = response.headers
 		@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
 		ZohoCRMClient.debug_log("Inside update_api_limits x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
 		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
@@ -702,6 +763,18 @@ class APILimits
 	end
 
 	def update_apilimits_HTTPRESPONSE(response)
+		headers = response.to_hash
+		if headers.has_key?("x_ratelimit_day_remaining") then
+			@x_daylimit_remaining = headers["x_ratelimit_day_remaining"]
+			ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
+			@x_daylimit = headers["x_ratelimit_day_limit"]
+			@x_ratelimit = headers["x_ratelimit_limit"]
+			@x_ratelimit_remaining = headers["x_ratelimit_remaining"]
+			@x_ratelimit_reset = headers["x_ratelimit_reset"]
+			@lastupdtime = Time.now.to_i
+			ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE ===> #{self}")
+		end
+=begin
 		@x_daylimit_remaining = response.header("x_ratelimit_day_remaining")
 		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
 		@x_daylimit = response.header("x_ratelimit_day_limit")
@@ -710,6 +783,7 @@ class APILimits
 		@x_ratelimit_reset = response.header("x_ratelimit_reset")
 		@lastupdtime = Time.now.to_i
 		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE ===> #{self}")
+=end
 	end
 
 	def get_lastupdtime
