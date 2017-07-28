@@ -776,7 +776,7 @@ class ZCRMModule
 		ZohoCRMClient.debug_log("params ===> #{params}")
 		headers = @zclient.construct_headers
 		ZohoCRMClient.debug_log("headers ==> #{headers}")
-		response = @zclient._delete(url, params, headers)
+		response = @zclient.safe_delete(url, params, headers)
 		body = response.body
 		print "Printing response body ::: ", "\n"
 		print body, "\n"
@@ -814,25 +814,46 @@ class ZCRMModule
 		url = Constants::DEF_CRMAPI_URL + self.module_name + "/" + id
 		ZohoCRMClient.debug_log("URL ===> #{url}")
 		headers = @zclient.construct_headers
-		response = @zclient._get(url, {}, headers)
-		code = response.code
+		response = @zclient.safe_get(url, {}, headers)
+		code = response.code.to_i
+
+		if code == 200 then
+			body = response.body
+			list = Api_Methods._get_list(body, "data")
+			if list.length > 0 then
+				record = list[0]
+				result = ZCRMRecord.new(self.module_name, record, @fields, self)
+			else
+				result = nil
+			end
+			return result
+		elsif code == 204 then
+			ZohoCRMClient.log("There is no data for id "+id+" for module "+module_name)
+			return nil
+		else
+			ZohoCRMClient.debug_log("Improper status code ==> #{code}")
+			return nil
+		end
+
 		if code == 204 then
 			ZohoCRMClient.log("There is no data for id "+id+" for module "+module_name)
 			return nil
 		end
+=begin
 		body = response.body
 		list = Api_Methods._get_list(body, "data")
-		if list.length > 0 then
-			record = list[0]
-			result = ZCRMRecord.new(self.module_name, record, @fields, self)
-		else
-			result = nil
-		end
+			if list.length > 0 then
+				record = list[0]
+				result = ZCRMRecord.new(self.module_name, record, @fields, self)
+			else
+				result = nil
+			end
 		return result
+=end
 	end
 
 	def update_record(record)
-		ZohoCRMClient.debug_log("Inside update_record, passed in record ==> #{record} ")
+		#ZohoCRMClient.debug_log("Inside update_record, passed in record ==> #{record} ")
 		if record.nil? || record.class != ZCRMRecord then
 			return false, nil
 		end
@@ -879,7 +900,7 @@ class ZCRMModule
 		#https://www.zohoapis.com/crm/v2/{Module}/{EntityID}
 		url = Constants::DEF_CRMAPI_URL + Constants::URL_PATH_SEPERATOR + module_name + Constants::URL_PATH_SEPERATOR + record_id
 		headers = @zclient.construct_headers
-		response = @zclient._delete(url, {}, headers)
+		response = @zclient.safe_delete(url, {}, headers)
 		body = response.body
 		temp = Api_Methods._get_list(body, "data")
 		json = temp[0]
@@ -923,7 +944,6 @@ class ZCRMModule
 		@fields = fields_obj
 	end
 
-	#private :populate_required_fields
 end
 
 class RelatedList

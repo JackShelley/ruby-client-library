@@ -25,6 +25,7 @@ class ZCRMRecord
 		end
 		@is_related_list = false
 		@related_list_obj = nil
+		@owner_id = nil
 	end
 
 	def set_related_list_obj(rel_obj)
@@ -257,6 +258,9 @@ class ZCRMRecord
 			return false
 		end
 		if image_path.nil? || image_path.empty? then
+			return false
+		end
+		if !File.exists?(image_path) then
 			return false
 		end
 		if type.nil? || type.empty? then
@@ -598,7 +602,7 @@ class ZCRMRecord
 		is_rel_module = rel_obj.is_module
 
 		mod_api_obj = nil
-		if is_rel_module && rel_module_name.nil? then
+		if is_rel_module && !rel_module_name.nil? then
 			ZohoCRMClient.debug_log("Getting module object => #{rel_module_name}")
 			mod_api_obj = @module_obj.load_crm_module(rel_module_name)
 		else
@@ -776,7 +780,7 @@ class ZCRMRecord
 		zclient = @module_obj.get_zclient
 		headers = zclient.construct_headers
 		params = {}
-		response = zclient._delete(url, params, headers)
+		response = zclient.safe_delete(url, params, headers)
 		result = is_delink_success(response)
 		return result
 	end
@@ -824,39 +828,6 @@ class ZCRMRecord
 
 	def get(key)
 		return @hash_values[key]
-	end
-
-	def set_owner(id, user_data)
-		profiles = @layout.profiles
-		user_obj = user_data[id]
-		confirm = user_obj["confirm"]
-		if !confirm then
-			return false, "User has not confirmed"
-		end
-		status = user_obj["status"]
-		if status != "active" then
-			return false, "User is not active yet"
-		end
-		u_profile_name = user_obj["profile"]["name"]
-		u_profile_id = user_obj["profile"]["id"]
-		valid = false
-		profiles.each do |p_obj|
-			p_id = p_obj["id"]
-			if u_profile_id == p_id then
-				valid = true
-				break
-			end
-		end
-		if !valid then
-			return false, "User's profile does not have permission for this particular record's layout"
-		end
-		@owner_id = id
-		self.set_field_byname("Owner", id)
-		return true, "SUCCESS"
-	end
-	
-	def get_owner
-		return @owner_id
 	end
 
 	def set(field, value)
@@ -918,23 +889,58 @@ class ZCRMRecord
 		end
 	end
 
-	def set_field_byname(key, value)
-		field = @fields[key]
-		data_type = ""
+	def get_owner
+		return @owner_id
+	end
+
+	def set_owner(id, user_data)
+		profiles = @layout.profiles
+		user_obj = user_data[id]
+		confirm = user_obj["confirm"]
+		if !confirm then
+			return false, "User has not confirmed"
+		end
+		status = user_obj["status"]
+		if status != "active" then
+			return false, "User is not active yet"
+		end
+		u_profile_name = user_obj["profile"]["name"]
+		u_profile_id = user_obj["profile"]["id"]
+		valid = false
+		profiles.each do |p_obj|
+			p_id = p_obj["id"]
+			if u_profile_id == p_id then
+				valid = true
+				break
+			end
+		end
+		if !valid then
+			return false, "User's profile does not have permission for this particular record's layout"
+		end
+		@owner_id = id
+		return true, "SUCCESS"
+	end
+
+	def get_fieldobj(field_name)
+		if @fields.nil? then
+			return nil
+		end
+		result = nil
+		@fields.each do |f_id, f_obj|
+			f_name = f_obj.field_name
+			if f_name == field_name then
+				return f_obj
+			end
+		end
+		return result
+	end
+
+	def setfield_byname(f_name, value)
+		field = self.get_fieldobj(f_name)
 		if field.nil? then
-			length = @unavailable_fields.length
-			@unavailable_fields[length] = key
-		elsif
-			data_type = field.get_datatype
+			return false, "No such field: #{f_name}, please refresh meta_data for '#{@module_name}' if its a newly created field."
 		end
-		current_value = get(key)
-		if current_value.nil? then
-			@added_fields[key] = current_value
-			@hash_values[key] = value
-			return true
-		else
-			return update(key,value,current_value, data_type)
-		end
+		return set(field, value)
 	end
 
 	def update(key, value, current_value="", data_type="")
@@ -961,6 +967,27 @@ class ZCRMRecord
 			return true, message
 		end
 	end
+
+=begin
+	def set_field_byname(key, value)
+		field = @fields[key]
+		data_type = ""
+		if field.nil? then
+			length = @unavailable_fields.length
+			@unavailable_fields[length] = key
+		elsif
+			data_type = field.get_datatype
+		end
+		current_value = get(key)
+		if current_value.nil? then
+			@added_fields[key] = current_value
+			@hash_values[key] = value
+			return true
+		else
+			return update(key,value,current_value, data_type)
+		end
+	end
+=end
 
 	#Getters and setters :: Named in a fashion easier to understand for api users
 	def delete
@@ -1004,6 +1031,10 @@ class ZCRMRecord
 			update_hash['id'] = self.record_id
 		end
 
+		if !@owner_id.nil? then
+			update_hash["Owner"] = @owner_id
+		end
+
 		@added_fields.each do |field_name, current_value| 
 			update_hash[field_name] = get(field_name)
 		end
@@ -1030,6 +1061,10 @@ class ZCRMRecord
 
 		if !self.record_id.nil? then
 			update_hash['id'] = self.record_id
+		end
+
+		if !@owner_id.nil? then
+			update_hash['id'] = @owner_id
 		end
 
 		@added_fields.each do |field_name, current_value| 

@@ -168,116 +168,6 @@ RSpec.describe ZohoCRMClient do
 				body = result.body
 				expect(body).not_to be_empty
 			end
-=begin  
-		#The following two cases are commented out as they will not work with handle_response function 
-		#This is because the upsert_post and _update_put do not use RestClient
-		#handle_response works with RestClient::Response objects 
-			it "should return response object intact, create a record, response 200 or 201" do
-				url = @leads_url + Constants::URL_PATH_SEPERATOR + "upsert"
-				@zclient = load_zclient_from_db(@zclient_fp)
-				headers = @zclient.construct_headers
-				new_record = @lObj.get_new_record
-				req_fields = @lObj.get_required_fields
-				fields = @lObj.get_fields
-				fields.each do |id, field_obj|
-					if req_fields.include? id || field_obj.is_required then
-						data_type = field_obj.data_type
-						value = ZCRMField.get_test_data(field_obj, @apiObj)
-						field_name = field_obj.field_name
-						new_record.set(field_name, value)
-					end
-				end
-				result, hsh = new_record.construct_upsert_hash
-				expect(result).to eq(true)
-				expect(hsh.class).to eq(Hash)
-				arr = []
-				arr[0] = hsh
-				final = {}
-				final["data"] = arr
-				json = JSON::generate(final)
-				params = {}
-				headers = @zclient.construct_headers
-				response = @zclient._upsert_post(url, params, headers, json)
-				result = @zclient.handle_response(response)
-				#ZohoCRMClient.debug_log(result.inspect)
-				#Assertions
-				expect(result).not_to be_nil #1
-				assert1 = false
-				assert1 = result.class.public_instance_methods.include? :code
-				expect(assert1).to be_truthy #2
-				code = result.code
-				expect(code.to_i).to eq(200)
-				assert2 = false
-				assert2 = result.class.public_instance_methods.include? :body
-				expect(assert2).to be_truthy #4
-				body = result.body
-				expect(body).not_to be_empty
-			end
-			it "should return response object intact, when status code is 201" do
-				url = @leads_url
-				headers = @zclient.construct_headers
-				num = 5
-				i = 0
-				final = {}
-				arr = []
-				req_fields = @lObj.get_required_fields
-				fields = @lObj.get_fields
-				while i < num do
-					new_record = @lObj.get_new_record
-					req_fields.each do |f_id|
-						f_obj = fields[f_id]
-						f_name = f_obj.field_name
-						val = ZCRMField.get_test_data(f_obj, @apiObj)
-						new_record.set(f_name, val)
-					end
-					bool, hsh = new_record.construct_upsert_hash
-					expect(bool).to eq(true)
-					expect(hsh).to be_an_instance_of(Hash)
-					arr[i] = hsh
-					i = i+1
-				end
-				final["data"] = arr
-				json = JSON::generate(final)
-				params = {}
-				headers = @zclient.construct_headers
-				response = @zclient._upsert_post(url, params, headers, json)
-				result = @zclient.handle_response(response)
-				#Assertions
-				expect(result).not_to be_nil #1
-				assert1 = false
-				assert1 = result.class.public_instance_methods.include? :code
-				expect(assert1).to be_truthy #2
-				code = result.code
-				expect(code.to_i).to eq(201) #3
-				assert2 = false
-				assert2 = result.class.public_instance_methods.include? :body
-				expect(assert2).to be_truthy #4
-				body = result.body
-				expect(body).not_to be_empty
-			end
-=end
-=begin
-			it "should return the response intact, when status is 204", :focus => true do
-				record_id = @lObj.create_test_records(1)[0]
-				leads_notes_url = @leads_url + Constants::URL_PATH_SEPERATOR + record_id + Constants::URL_PATH_SEPERATOR + "Notes"
-				params = {}
-				headers = @zclient.construct_headers
-				response = @zclient._get(leads_notes_url, params, headers)
-				result = @zclient.handle_response(response)
-				#Assertions
-				expect(result).not_to be_nil #1
-				assert1 = false
-				assert1 = result.class.public_instance_methods.include? :code
-				expect(assert1).to be_truthy #2
-				code = result.code
-				expect(code).to eq(204) #3
-				assert2 = false
-				assert2 = result.class.public_instance_methods.include? :body
-				expect(assert2).to be_truthy #4
-				body = result.body
-				expect(body).not_to be_empty
-			end
-=end
 		end
 		context "when the status code is 400 " do
 			it "should return the response intact, when status is 400 " do
@@ -292,7 +182,7 @@ RSpec.describe ZohoCRMClient do
 
 			end
 		end
-		context "Status code is 401 but refreshtoken is valid ", :focus => true do
+		context "Status code is 401 but refreshtoken is valid " do
 			it "should return the error response intact, signifying us to go for a retry" do
 				#Throws an exception: We need to catch and progress
 				url = @leads_url
@@ -526,7 +416,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set_field_byname("Last_name", "Updated_Last_Name")
+				new_record.setfield_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh
@@ -561,7 +451,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set_field_byname("Last_name", "Updated_Last_Name")
+				new_record.setfield_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh
@@ -638,7 +528,7 @@ RSpec.describe ZohoCRMClient do
 				records.each do |id, record_obj|
 					new_record = record_obj
 				end
-				new_record.set_field_byname("Last_name", "Updated_Last_Name")
+				new_record.setfield_byname("Last_name", "Updated_Last_Name")
 				hsh = new_record.construct_update_hash
 				arr = []
 				arr[0] = hsh

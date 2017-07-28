@@ -28,7 +28,6 @@ RSpec.describe ZCRMRecord do
 		@all_field_x_mod_list = ["Activities", "Tasks", "Events", "Calls", "Purchase_Orders", "Notes", "Quotes", "Invoices", "Sales_Orders", "Attachments", "Price_Books", "Potentials", "Deals", "Approvals"]
 		@file_location = "/Users/kamalkumar/Downloads/attachment.pdf"
 		@invalid_location = "/this/path/does/not/exist"
-		@image_file = "/Users/kamalkumar/Downloads/osho001.jpg"
 		@moduleVsrecord_id = {} #All these records have attachment
 		#["Activities", "Tasks", "Events", "Calls", "Accounts", "Contacts", "Campaigns", "Leads", "Deals", "Purchase_Orders", "Notes", "Products", "Quotes", "Solutions", "Price_Books", "Invoices", "Sales_Orders", "Vendors", "Travels", "NewModules", "Entermodules", "Plural_form_of_module_nam", "Cases", "Attachments", "Approvals"]
 		@attachment_x_list = ["Activities", "Calls", "Attachments", "Approvals"]
@@ -470,7 +469,7 @@ RSpec.describe ZCRMRecord do
 					mod_obj = @apiObj.load_crm_module(mod)
 					r_obj = mod_obj.get_new_record
 					r_obj.set_record_id(record_id)
-					bool = r_obj.upload_photo(@image_file)
+					bool = r_obj.upload_photo(@invalid_location)
 					expect(bool).to eq false
 				end
 			end
@@ -812,6 +811,9 @@ RSpec.describe ZCRMRecord do
 			it "should return false" do
 				list = @module_list.keys
 				list.each do |mod|
+					if @notes_x_list.include? (mod) then
+						next
+					end
 					mod_obj = @apiObj.load_crm_module(mod)
 					record_hash = mod_obj.get_records(1)
 					r_id, r_obj = nil, nil
@@ -1014,6 +1016,9 @@ RSpec.describe ZCRMRecord do
 			it "returns false and an empty hash" do
 				list = @module_list.keys
 				list.each do |mod|
+					if @x_mod_list.include?(mod) then
+						next
+					end
 					mod_obj = @apiObj.load_crm_module(mod)
 					record_hash = mod_obj.get_records(1)
 					r_id, r_obj = nil, nil
@@ -1030,10 +1035,13 @@ RSpec.describe ZCRMRecord do
 				end
 			end
 		end
-		context "record does not have the particular related record", :focus => true do
+		context "record does not have the particular related record" do
 			it "returns true and an empty hash" do
 				list = @module_list.keys
 				list.each do |mod|
+					if @x_mod_list.include?(mod) then
+						next
+					end
 					ZohoCRMClient.debug_log("Trying for ==> #{mod}")
 					mod_obj = @apiObj.load_crm_module(mod)
 					related_modules = mod_obj.get_related_modules
@@ -1082,6 +1090,7 @@ RSpec.describe ZCRMRecord do
 		end
 	end
 
+=begin
 	describe ".delink_rl" do
 		context "Module object is not set " do
 			it "returns false " do
@@ -1135,6 +1144,7 @@ RSpec.describe ZCRMRecord do
 		end
 		
 	end
+=end
 
 end
 

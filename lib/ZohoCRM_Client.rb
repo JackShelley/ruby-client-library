@@ -86,7 +86,6 @@ class ZohoCRMClient
 	#def _post(url="", params={}, headers={})#, payload="")
 	#def _post_multipart(url="", headers={}, multipart_file="")
 	#def _put(url="", params={}, headers={}, payload)
-	#def _delete(url="", params={}, headers={})
 
 
 	#safe_get function is not used anywhere, We could use it if situation demands it.
@@ -133,7 +132,7 @@ class ZohoCRMClient
 		rescue => e
 			ZohoCRMClient.debug_log("Exception occurred while trying for ==> #{url} \n
 				Exception class, self ===> #{e.class}, #{e}")
-		 	return handle_response(e)
+		 	return error_response(e)
 		end
 		return handle_response(response)
 	end
@@ -345,6 +344,47 @@ class ZohoCRMClient
 		handle_response(response)
 	end
 
+=begin
+	def safe_get(url="", params={}, headers={})
+		if headers.nil? || headers.empty? then
+			headers = self.construct_headers
+		end
+		r = _get(url, params, headers)
+		if r.nil? then
+			return nil
+		end
+		code = r.code.to_i
+		if code == 401 then
+			headers = self.construct_headers
+			return _get(url, params, headers)
+		end
+		if code == 429 then
+			headers = self.construct_headers
+			return _get(url, params, headers)
+		end
+		return r
+	end
+=end
+
+	def safe_delete(url="", params={}, headers={})
+		if headers.nil? || headers.empty? then
+			headers = self.construct_headers
+		end
+		r = self._delete(url, params, headers)
+		if r.nil? then
+			return nil
+		end
+		code = r.code.to_i
+		if code == 401 then
+			headers = self.construct_headers
+			return self._delete(url, params, headers)
+		elsif code == 429 then
+			headers = self.construct_headers
+			return self.delete(url, params, headers)
+		end
+		return r
+	end
+
 	## Makes a HTTP::Put request to the URL along with given params, header
 	def _delete(url="", params={}, headers={})
 		if url.empty? then
@@ -400,10 +440,11 @@ class ZohoCRMClient
 			ZohoCRMClient.debug_log("Printing caller stack : \n #{caller.inspect}")
 			return nil
 		elsif code == 429
+			ZohoCRMClient.debug_log("Too many requests hence updating api limits ==> #{e}")
 			if @api_limits.nil? then
-				@api_limits = APILimits.new(response)
+				@api_limits = APILimits.new(r)
 			else
-				@api_limits.update_api_limits(response)
+				@api_limits.update_api_limits(r)
 			end
 			return e.response
 		end
@@ -413,7 +454,7 @@ class ZohoCRMClient
 	def handle_response(response)
 
 		if response.class != RestClient::Response then
-			ZohoCRMClient.debug_log("Response to be handled is an exception")
+			ZohoCRMClient.debug_log("Response to be handled is an exception ===> #{response}")
 			return error_response(response)
 		end
 		if response.nil? then
@@ -651,20 +692,24 @@ class APILimits
 	def update_api_limits(response)
 		headers = response.headers
 		@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
+		ZohoCRMClient.debug_log("Inside update_api_limits x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
 		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
 		@x_ratelimit = headers[:x_ratelimit_limit]#.to_i
 		@x_ratelimit_remaining = headers[:x_ratelimit_remaining]#.to_i
 		@x_ratelimit_reset = headers[:x_ratelimit_reset]#.to_i
 		@lastupdtime = Time.now.to_i
+		ZohoCRMClient.debug_log("Inside update_api_limits ===> #{self}")
 	end
 
 	def update_apilimits_HTTPRESPONSE(response)
 		@x_daylimit_remaining = response.header("x_ratelimit_day_remaining")
+		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
 		@x_daylimit = response.header("x_ratelimit_day_limit")
 		@x_ratelimit = response.header("x_ratelimit_limit")
 		@x_ratelimit_remaining = response.header("x_ratelimit_remaining")
 		@x_ratelimit_reset = response.header("x_ratelimit_reset")
 		@lastupdtime = Time.now.to_i
+		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE ===> #{self}")
 	end
 
 	def get_lastupdtime
