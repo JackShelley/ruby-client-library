@@ -119,15 +119,6 @@ class ZohoCRMClient
 		@tokens = Tokens.new(refresh_token, access_token)
 	end
 
-	#def _get(url="", params={}, headers={})
-	#def _upsert_post(url="", params={}, headers={}, payload=nil)
-	#def _update_put(url="", headers={}, payload=nil)
-	#def _post(url="", params={}, headers={})#, payload="")
-	#def _post_multipart(url="", headers={}, multipart_file="")
-	#def _put(url="", params={}, headers={}, payload)
-
-
-	#safe_get function is not used anywhere, We could use it if situation demands it.
 	def safe_get(url="", params={}, headers={})
 		if headers.nil? || headers.empty? then
 			headers = self.construct_headers
@@ -148,8 +139,6 @@ class ZohoCRMClient
 		return r
 	end
 
-
-	## Makes a HTTP::Get request to the URL along with given params, headers
 	def _get(url="", params={}, headers={})
 		if url.empty? then
 			return nil
@@ -160,14 +149,9 @@ class ZohoCRMClient
 		if !params.empty? then
 			headers["params"] = params
 		end
-		#ZohoCRMClient.debug_log("Inside _get function")
-		#ZohoCRMClient.debug_log("URL ===> #{url}")
-		#ZohoCRMClient.debug_log("Params ===> #{params}")
-		#ZohoCRMClient.debug_log("caller ===> #{caller[0]}\n#{caller[1]}\n#{caller[2]}")
+
 		begin
 			response = RestClient.get(url, headers)
-			#ZohoCRMClient.debug_log("Resonse code, class, body ==> #{response.code}, #{response.class}, #{response.body}")
-			#ZohoCRMClient.debug_log("Response ===> #{response}")
 		rescue => e
 			ZohoCRMClient.debug_log("Exception occurred while trying for ==> #{url} \n
 				Exception class, self ===> #{e.class}, #{e}")
@@ -177,7 +161,6 @@ class ZohoCRMClient
 	end
 
 	def safe_upsert_post(url="", params={}, headers={}, payload=nil)
-	#todo:commentout: we have handled these cases inside function ZCRMModule.upsert
 		res = _upsert_post(url, params, headers, payload)
 		ZohoCRMClient.debug_log("Response after first call ==> #{res}")
 		code = res.code.to_i
@@ -217,8 +200,6 @@ class ZohoCRMClient
 		if payload.nil? || payload.empty? then
 			return nil
 		end
-
-		ZohoCRMClient.debug_log("Printing headers ===> #{headers}")
 		
 		begin
 			uri = URI(url)
@@ -244,14 +225,6 @@ class ZohoCRMClient
 		    return nil
 		end
 		return res
-	end
-
-	def update_limits_HTTPRESPONSE(res)
-		if @api_limits.nil? then
-			raise StandardError.new("Api Limits is nil while calling update_put : ")
-		else
-			@api_limits.update_apilimits_HTTPRESPONSE(res)
-		end
 	end
 
 	def safe_update_put(url="", headers={}, payload=nil)
@@ -338,42 +311,6 @@ class ZohoCRMClient
 		#handle_response(response)
 	end
 
-	def _post_multipart(url, file_path, headers)
-		url = URI.parse('https://www.zohoapis.com/crm/v2/Accounts/297527000005241003/Attachments')
-		pdf = File.open("/Users/kamalkumar/Downloads/PDFDocument.pdf")
-		http = Net::HTTP.new(url.host, url.port)
-		http.use_ssl = (url.scheme == "https")
-		req = Net::HTTP::Post::Multipart.new url.path, "file" => UploadIO.new(pdf, "image/pdf", "file")
-		req.add_field("Authorization", "Zoho-oauthtoken 1000.c6b1277122be1affd1ccd38cee3bad4d.a533d0595136df653ee4d4e588a19240")
-		res = http.request(req)
-		puts res.body
-	end
-
-	## Special handling if the API params involve a multipart payload::: For Upload attachment | photo API
-	def _post_multipart1(url="", headers={}, multipart_file="")
-		if url.empty? then
-			ZohoCRMClient.log("_post_multipart called with an empty url. Hence, returning nil")
-			return nil
-		end
-		if headers.empty? then
-			ZohoCRMClient.log("_post_multipart called with empty headers. Hence, returning nil")
-			return nil
-		end
-		begin
-			f = File.new(multipart_file, 'rb')
-		rescue Exception => e  ##{TODO: This message will be caught and directed to the user. For now, I am printing it here, since we do not have full structure for the gem}
-			ZohoCRMClient.log("Error Occurred while opening the multipart payload. Please check the file url again. ")
-			ZohoCRMClient.log(e.message)
-			return nil
-		end
-		begin
-			response = RestClient.post url, {:file => File.new(multipart_file, 'rb'), :multipart=>true}, headers
-		rescue => e
-			return error_response(e)
-		end
-		handle_response(response)
-	end
-
 	## Makes a HTTP::Put request to the URL along with given params, header and raw-content payload
 	def _put(url="", params={}, headers={}, payload)
 		if !params.empty? then
@@ -382,28 +319,6 @@ class ZohoCRMClient
 		response = RestClient.put(url, payload, headers)
 		handle_response(response)
 	end
-
-=begin
-	def safe_get(url="", params={}, headers={})
-		if headers.nil? || headers.empty? then
-			headers = self.construct_headers
-		end
-		r = _get(url, params, headers)
-		if r.nil? then
-			return nil
-		end
-		code = r.code.to_i
-		if code == 401 then
-			headers = self.construct_headers
-			return _get(url, params, headers)
-		end
-		if code == 429 then
-			headers = self.construct_headers
-			return _get(url, params, headers)
-		end
-		return r
-	end
-=end
 
 	def safe_delete(url="", params={}, headers={})
 		if headers.nil? || headers.empty? then
@@ -520,7 +435,7 @@ class ZohoCRMClient
 			end
 		elsif code == 400 then
 			ZohoCRMClient.log("Bad request: failure")
-		else 
+		else
 			puts "Failure"
 		end
 
@@ -546,7 +461,6 @@ class ZohoCRMClient
 		res = false
 		t = Time.new.to_i
 
-		#ZohoCRMClient.debug_log("Printing (current time in sec), (expiry_time_insec) ===> (#{t}) , (#{@tokens.expiry_time_insec})")
 		if t < @tokens.expiry_time_insec
 			res = true
 		elsif self.revoke_token
@@ -637,17 +551,12 @@ class ZohoCRMClient
 		return res
 	end
 
-	def self.panic (msg = "Please handle...")
-		print "Do Not Know how to handle this, hence panicking ::: ", "\n"
-		print "Here is what you are looking for ::: ", msg, "\n"
-		raise msg
-	end
-
-	def self.handle_exception(e, message)
-		print message, "\n"
-		print 'Exception caught here, not gonna throw ::: So printing trace here', '\n'
-		print e.message, '\n'
-		print e.backtrace.inspect, '\n'
+	def update_limits_HTTPRESPONSE(res)
+		if @api_limits.nil? then
+			raise StandardError.new("Api Limits is nil while calling update_put : ")
+		else
+			@api_limits.update_apilimits_HTTPRESPONSE(res)
+		end
 	end
 
 	def apilimit_update
@@ -672,16 +581,19 @@ class ZohoCRMClient
 		return result
 	end
 
-	def raiseDayLimitTest#todo: comment out
-		if @api_limits.nil? then
-			self.apilimit_update
-		end
-		lastupdtime = @api_limits.get_lastupdtime
-		raise DayLimitExceeded.new(lastupdtime)
+	def self.panic (msg = "Please handle...")
+		print "Do Not Know how to handle this, hence panicking ::: ", "\n"
+		print "Here is what you are looking for ::: ", msg, "\n"
+		raise msg
 	end
-	def badRequestTest#todo: comment out
-		raise BadRequestException.new()
+
+	def self.handle_exception(e, message)
+		print message, "\n"
+		print 'Exception caught here, not gonna throw ::: So printing trace here', '\n'
+		print e.message, '\n'
+		print e.backtrace.inspect, '\n'
 	end
+
 end
 
 
@@ -750,18 +662,6 @@ class APILimits
 		ZohoCRMClient.debug_log("Inside update_api_limits ===> #{self}")
 	end
 
-	def update_api_limits1(response)
-		headers = response.headers
-		@x_daylimit_remaining = headers[:x_ratelimit_day_remaining]#.to_i
-		ZohoCRMClient.debug_log("Inside update_api_limits x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
-		@x_daylimit = headers[:x_ratelimit_day_limit]#.to_i
-		@x_ratelimit = headers[:x_ratelimit_limit]#.to_i
-		@x_ratelimit_remaining = headers[:x_ratelimit_remaining]#.to_i
-		@x_ratelimit_reset = headers[:x_ratelimit_reset]#.to_i
-		@lastupdtime = Time.now.to_i
-		ZohoCRMClient.debug_log("Inside update_api_limits ===> #{self}")
-	end
-
 	def update_apilimits_HTTPRESPONSE(response)
 		headers = response.to_hash
 		if headers.has_key?("x_ratelimit_day_remaining") then
@@ -774,16 +674,6 @@ class APILimits
 			@lastupdtime = Time.now.to_i
 			ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE ===> #{self}")
 		end
-=begin
-		@x_daylimit_remaining = response.header("x_ratelimit_day_remaining")
-		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE x_ratelimit_day_remaining ===> #{@x_daylimit_remaining}")
-		@x_daylimit = response.header("x_ratelimit_day_limit")
-		@x_ratelimit = response.header("x_ratelimit_limit")
-		@x_ratelimit_remaining = response.header("x_ratelimit_remaining")
-		@x_ratelimit_reset = response.header("x_ratelimit_reset")
-		@lastupdtime = Time.now.to_i
-		ZohoCRMClient.debug_log("Inside update_apilimits_HTTPRESPONSE ===> #{self}")
-=end
 	end
 
 	def get_lastupdtime

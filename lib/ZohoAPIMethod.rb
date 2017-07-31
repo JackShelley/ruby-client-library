@@ -12,8 +12,6 @@ class Meta_data
 	@@org_metadata_filename = "/org_data"
 
 	def self.module_data(zclient, module_name, meta_folder)
-		## Mainly required properties : module_name, api_name, display_name, singular_name, plural_name
-		#Actual = "https://www.zohoapis.com/crm/v2/settings/modules/{module_name}"
 		if zclient.nil? then
 			return false
 		end
@@ -69,7 +67,7 @@ class Meta_data
 					ZohoCRMClient.debug_log("Something wrong is trying to get in fields array " + f)
 				end
 			end
-			req_fields = mod_obj.get_required_fields#todo comment out: this line may not be needed
+			req_fields = mod_obj.get_required_fields #This line is trivial, doesn't hurt.
 			Meta_data::dump_yaml(mod_obj, path+file_name)
 			res = true
 		rescue Exception => e
@@ -100,7 +98,6 @@ class Meta_data
 	end
 
 	def self.get_module_list(zclient, api_supported = true)
-		# Actual url: https://www.zohoapis.com/crm/v2/settings/modules
 		res = {}
 		url_path = "settings/modules"
 		#url = Constants::DEF_CRMAPI_URL + url_path
@@ -142,8 +139,6 @@ class Meta_data
 	end
 
 	def self.user_data(zclient, refresh = true, meta_folder="/Users/kamalkumar/Desktop/")
-		## user_id, user_name, user_email, created_time (invitation_accepted_time)
-		#Actual = "https://www.zohoapis.com/crm/v2/users"
 		res = false
 		begin
 			headers = zclient.construct_headers
@@ -197,8 +192,6 @@ class Meta_data
 	end
 
 	def self.org_data(zclient, refresh = true, meta_folder="/Users/kamalkumar/Desktop/")
-		## org_name, zgid
-		#Actual = "https://www.zohoapis.com/crm/v2/org"
 		res = false
 		begin
 			headers = zclient.construct_headers
@@ -370,7 +363,7 @@ class Api_Methods
 		begin
 			json = JSON.parse(resp_json)
 			res = json[key]
-		rescue
+		rescue e
 			puts "From Api_Methods :::: _get_list: " << "\n"
 			ZohoCRMClient.panic "Exception while parsing response body ::: "
 		end

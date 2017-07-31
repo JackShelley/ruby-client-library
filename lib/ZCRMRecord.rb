@@ -83,7 +83,6 @@ class ZCRMRecord
 	end
 	
 	def get_attachments
-		#Url: https://www.zohoapis.com/crm/v2/{module}/{record_id}/Attachments
 		if @module_obj.nil? then
 			ZohoCRMClient.debug_log("Please set module object before proceeding ::: ")
 			return false, {}

@@ -155,14 +155,6 @@ class ZCRMModule
 				apiname = rl_obj.api_name
 				@related_lists[apiname] = rl_obj
 			end
-=begin
-			rls.each do |rl|
-				rl = rls[0]
-				rl_obj = RelatedList.new(rl, self)
-				apiname = rl_obj.api_name
-				@related_lists[apiname] = rl_obj
-			end
-=end
 		end
 		if !@related_lists.empty? then
 			#ZohoCRMClient.debug_log("Related list have been populated, printing them here for debugging \n #{@related_lists}")
@@ -207,7 +199,7 @@ class ZCRMModule
 			if layout.nil? then
 				ZohoCRMClient.debug_log("Default layout is nil ==> \n 
 					This happens because the status has other values than 0 and 1")
-				return default_required_fields
+				return self.default_required_fields
 			end
 		else
 			@layouts.each do |l|
