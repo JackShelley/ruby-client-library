@@ -20,6 +20,7 @@ class ZCRMRecord
 		end
 		@required_fields = []
 		@module_obj = mod_obj
+		@layout = nil
 		if !mod_obj.nil? then
 			@layout = mod_obj.default_layout
 		end

@@ -38,6 +38,9 @@ class ZCRMNote
 	def get_owner_name
 		return @owner["name"]
 	end
+	def note_data
+		return @hash_values
+	end
 	def update_title(title)
 		if !title.nil? && !title.empty? then
 			@note_title = title

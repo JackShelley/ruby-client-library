@@ -6,7 +6,6 @@ require 'time'
 require 'securerandom'
 
 class ZCRMField
-	@@field_attributes = ["visible", "json_type", "field_label", "length", "tooltip", "view_type", "created_source", "read_only" ]
 
 	attr_accessor  :api_name, :field_label, :json_type, :data_type, :custom_field, :is_picklist, :hash_values, :is_required, :picklist_values
 
@@ -174,7 +173,7 @@ class ZCRMField
 		if data_type != 'formula' then
 			return true, get('formula')
 		else
-			return false, "Something success"
+			return false, nil
 		end
 	end
 

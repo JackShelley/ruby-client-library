@@ -6,8 +6,8 @@ class ZCRMLayout
 		@id = layout_hash["id"]
 		@name = layout_hash["name"]
 		@profiles = layout_hash["profiles"]
-		status = layout_hash["status"] #todo: We may need status in the future. Test and add if we need
-		if status == 0 then
+		@status = layout_hash["status"] #todo: We may need status in the future. Test and add if we need
+		if @status == 0 then
 			@is_default = true
 		else 
 			@is_default = false

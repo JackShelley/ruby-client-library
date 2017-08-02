@@ -25,7 +25,4 @@ class ZCRMAttachment
 	def parent_name
 		return @parent_hash["name"]
 	end
-
-	def download_attachment
-	end
 end

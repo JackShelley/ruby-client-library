@@ -710,16 +710,6 @@ class DayLimitExceeded < StandardError
 		@lastupdtime = lastupdtime
 	end
 end
-class APILimitsError < StandardError
-	def initialze(msg = "Problem Occurred while fetching api limits")
-		super
-	end
-end
-class TestDataException < StandardError
-	def initialize(msg = "Problem occurred while getting testing data ")
-		super
-	end
-end
 class BadRequestException < StandardError
 	def initialize(msg = "Bad request")
 		super

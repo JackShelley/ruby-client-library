@@ -16,7 +16,7 @@ class Meta_data
 			return false
 		end
 		if module_name.nil? || module_name.empty? then
-			return false			
+			return false
 		end
 		begin
 			headers = zclient.construct_headers
